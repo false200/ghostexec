@@ -18,6 +18,43 @@ _FENCE_RE = re.compile(r"^\s*```(?:json)?\s*", re.IGNORECASE)
 _FENCE_END_RE = re.compile(r"```\s*$")
 
 
+def completion_to_str(completion: Any) -> str:
+    """
+    Turn a TRL / chat completion into plain text for JSON extraction.
+
+    GRPO may pass ``str`` or structured values (e.g. list of ``{"role","content"}`` dicts);
+    lists used to reach ``_strip_markdown_fences`` caused ``AttributeError: 'list' object has no attribute 'strip'``.
+    """
+    if completion is None:
+        return ""
+    if isinstance(completion, str):
+        return completion.strip()
+    if isinstance(completion, (list, tuple)):
+        parts: list[str] = []
+        for item in completion:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                c = item.get("content")
+                if isinstance(c, str):
+                    parts.append(c)
+                elif isinstance(c, list):
+                    for block in c:
+                        if isinstance(block, dict):
+                            t = block.get("text")
+                            if block.get("type") == "text" and isinstance(t, str):
+                                parts.append(t)
+            else:
+                parts.append(str(item))
+        return "\n".join(parts).strip()
+    if isinstance(completion, dict):
+        c = completion.get("content")
+        if isinstance(c, str):
+            return c.strip()
+        return json.dumps(completion, ensure_ascii=False)
+    return str(completion).strip()
+
+
 def _strip_markdown_fences(text: str) -> str:
     s = text.strip()
     lines = s.splitlines()
@@ -57,13 +94,15 @@ def _extract_json_object(text: str) -> dict[str, Any] | None:
     return None
 
 
-def parse_completion_to_action(text: str) -> GhostexecAction | None:
+def parse_completion_to_action(completion: Any) -> GhostexecAction | None:
     """
     Parse a model completion into GhostexecAction.
 
     Accepts raw JSON, ```json ... ``` fences, or text with an embedded object.
+    ``completion`` may be a string or a chat-style list of message dicts (TRL GRPO).
     Returns None if no valid action dict can be parsed.
     """
+    text = completion_to_str(completion)
     data = _extract_json_object(text)
     if not data:
         return None

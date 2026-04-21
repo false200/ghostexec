@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from training.grpo_ghostexec_reward import ghostexec_env_step_reward
-from training.llm_action_parse import parse_completion_to_action
+from training.llm_action_parse import completion_to_str, parse_completion_to_action
 
 
 def test_parse_raw_json_action() -> None:
@@ -31,11 +31,22 @@ def test_parse_invalid_returns_none() -> None:
     assert parse_completion_to_action('{"action_type": "nope"}') is None
 
 
+def test_parse_chat_style_list_completion() -> None:
+    """TRL GRPO may pass conversational structures instead of raw strings."""
+    msgs = [
+        {"role": "assistant", "content": '{"action_type": "do_nothing"}'},
+    ]
+    assert completion_to_str(msgs).strip().startswith("{")
+    act = parse_completion_to_action(msgs)
+    assert act is not None
+    assert act.action_type == "do_nothing"
+
+
 def test_grpo_reward_returns_floats() -> None:
     prompts = ["p1", "p2"]
     completions = [
         '{"action_type": "do_nothing"}',
-        '{"action_type": "do_nothing"}',
+        [{"role": "assistant", "content": '{"action_type": "do_nothing"}'}],
     ]
     out = ghostexec_env_step_reward(prompts, completions)
     assert len(out) == 2
