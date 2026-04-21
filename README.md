@@ -11,259 +11,154 @@ tags:
   - openenv
 ---
 
-# Ghostexec Environment
+# Ghostexec
 
-A simple test environment that echoes back messages. Perfect for testing the env APIs as well as demonstrating environment usage patterns.
+**Ghostexec** is an [OpenEnv](https://github.com/meta-pytorch/OpenEnv)-compatible environment that simulates a busy executive’s world: inbox, calendar, contacts, tasks, and stakeholder moods. The agent chooses **structured actions** (reply, reschedule, delegate, …); the server returns a **plain-text briefing** as the main observation and a **scalar reward** shaped around conflict, relationships, and task progress. Scenario data lives in `scenarios/*.json` — nothing is hardcoded in Python for world content.
 
-## Quick Start
+**Manifest:** `openenv.yaml` (name **`ghostexec`**, HF Space identifier).  
+**Package:** `openenv-ghostexec` in `pyproject.toml` (import as `ghostexec`).
 
-The simplest way to use the Ghostexec environment is through the `GhostexecEnv` class:
+---
+
+## Features
+
+- **Legal action set** — `reply_email`, `archive_email`, `reschedule_meeting`, `cancel_meeting`, `complete_task`, `delegate_task`, `send_message`, `do_nothing` (see `models.py`).
+- **Human-readable observations** — `GhostexecObservation.echoed_message` is the full briefing text for the model (not raw JSON).
+- **Invalid actions** — Handled in-process: structured metadata (e.g. `step_ok`), no server crash.
+- **Reward** — Weighted blend of conflict, relationship, and task signals (see [Reward](#reward)); per-step logging under `outputs/logs/` (gitignored).
+- **HTTP + WebSocket** — FastAPI app in `server/app.py`; `GhostexecEnv` uses WebSockets for persistent episodes.
+
+---
+
+## Quick start (Python client)
+
+From the repo root (`ghostexec/` — where `pyproject.toml` lives):
+
+```bash
+uv sync
+uv run server --port 8000
+```
+
+In another terminal or notebook:
 
 ```python
 from ghostexec import GhostexecAction, GhostexecEnv
 
-try:
-    # Create environment from Docker image
-    ghostexecenv = GhostexecEnv.from_docker_image("ghostexec-env:latest")
+with GhostexecEnv(base_url="http://127.0.0.1:8000") as env:
+    out = env.reset()
+    print(out.observation.echoed_message[:500], "…")  # plain-text briefing
 
-    # Reset
-    result = ghostexecenv.reset()
-    print(f"Reset: {result.observation.echoed_message}")
-
-    # Send multiple messages
-    messages = ["Hello, World!", "Testing echo", "Final message"]
-
-    for msg in messages:
-        result = ghostexecenv.step(GhostexecAction(message=msg))
-        print(f"Sent: '{msg}'")
-        print(f"  → Echoed: '{result.observation.echoed_message}'")
-        print(f"  → Length: {result.observation.message_length}")
-        print(f"  → Reward: {result.reward}")
-
-finally:
-    # Always clean up
-    ghostexecenv.close()
+    step = env.step(
+        GhostexecAction(
+            action_type="reply_email",
+            email_id="e01",
+            message_body=(
+                "Marcus — acknowledged. Revised figures and short rationale "
+                "before noon. — Exec"
+            ),
+        )
+    )
+    print("reward:", step.reward)
+    print("metadata keys:", sorted((step.observation.metadata or {}).keys()))
 ```
 
-That's it! The `GhostexecEnv.from_docker_image()` method handles:
-- Starting the Docker container
-- Waiting for the server to be ready
-- Connecting to the environment
-- Container cleanup when you call `close()`
-
-## Building the Docker Image
-
-Before using the environment, you need to build the Docker image:
+**Docker image** (optional): if your OpenEnv client supports it, you can point `GhostexecEnv` at a container built from `server/Dockerfile`. Build from repo root:
 
 ```bash
-# From project root
 docker build -t ghostexec-env:latest -f server/Dockerfile .
 ```
 
-## Deploying to Hugging Face Spaces
+---
 
-You can easily deploy your OpenEnv environment to Hugging Face Spaces using the `openenv push` command:
+## Actions and fields
 
-```bash
-# From the environment directory (where openenv.yaml is located)
-openenv push
+`GhostexecAction` (`models.py`) includes:
 
-# Or specify options
-openenv push --namespace my-org --private
-```
+| `action_type`          | Typical fields used |
+|------------------------|----------------------|
+| `reply_email`          | `email_id`, `message_body` |
+| `archive_email`      | `email_id` |
+| `reschedule_meeting` | `meeting_id`, `new_time`, `reason` |
+| `cancel_meeting`     | `meeting_id`, `reason` |
+| `complete_task`      | `task_id` |
+| `delegate_task`      | `task_id`, `contact_name` |
+| `send_message`       | `contact_name`, `message` (channel text) |
+| `do_nothing`         | — (intentionally weak / penalised path) |
 
-The `openenv push` command will:
-1. Validate that the directory is an OpenEnv environment (checks for `openenv.yaml`)
-2. Prepare a custom build for Hugging Face Docker space (enables web interface)
-3. Upload to Hugging Face (ensuring you're logged in)
+Unknown or malformed HTTP payloads deserialize safely to `do_nothing`-style defaults where applicable so older clients do not crash.
 
-### Prerequisites
+---
 
-- Authenticate with Hugging Face: The command will prompt for login if not already authenticated
+## Observation
 
-### Options
+`GhostexecObservation`:
 
-- `--directory`, `-d`: Directory containing the OpenEnv environment (defaults to current directory)
-- `--repo-id`, `-r`: Repository ID in format 'username/repo-name' (defaults to 'username/env-name' from openenv.yaml)
-- `--base-image`, `-b`: Base Docker image to use (overrides Dockerfile FROM)
-- `--private`: Deploy the space as private (default: public)
+- **`echoed_message`** — Full briefing (emails, conflicts, contacts, tasks, stress, steps remaining).
+- **`message_length`** — Length of `echoed_message` for quick checks.
+- **`reward`**, **`done`**, **`metadata`** — Step outcome; metadata carries flags such as `step_ok`, reward breakdown fields, and ids for debugging.
 
-### Examples
+---
 
-```bash
-# Push to your personal namespace (defaults to username/env-name from openenv.yaml)
-openenv push
+## Reward
 
-# Push to a specific repository
-openenv push --repo-id my-org/my-env
+Phase-4 scoring (`server/reward.py`) combines three channels with **fixed weights**:
 
-# Push with a custom base image
-openenv push --base-image ghcr.io/meta-pytorch/openenv-base:latest
+\[
+\text{weighted base} = 0.35 \cdot \text{conflict} + 0.35 \cdot \text{relationship} + 0.30 \cdot \text{task}
+\]
 
-# Push as a private space
-openenv push --private
+Then applies output scaling, invalid-step adjustments, bonuses/penalties, and a floor for `do_nothing`. Full component values are available on `RewardBreakdown` and are mirrored into observation metadata where configured. **Episode reward traces** append to `outputs/logs/episode_rewards.jsonl` (directory gitignored).
 
-# Combine options
-openenv push --repo-id my-org/my-env --base-image custom-base:latest --private
-```
+---
 
-After deployment, your space will be available at:
-`https://huggingface.co/spaces/<repo-id>`
+## HTTP vs WebSocket (episode state)
 
-The deployed space includes:
-- **Web Interface** at `/web` - Interactive UI for exploring the environment
-- **API Documentation** at `/docs` - Full OpenAPI/Swagger interface
-- **Health Check** at `/health` - Container health monitoring
-- **WebSocket** at `/ws` - Persistent session endpoint for low-latency interactions
+- **HTTP** `POST /reset` and `POST /step` often bind to **short-lived** environment instances depending on deployment; consecutive HTTP calls may not share one in-memory episode.
+- **Ghostexec** still applies your action against a scenario-primed instance so a lone `POST /step` can return a meaningful reward and metadata.
+- **WebSocket `/ws`** — Use this (or `GhostexecEnv(base_url=...)`, which speaks WebSocket) for **multi-step episodes** on the same session.
 
-**HTTP vs WebSocket (episode state):** With the OpenEnv HTTP stack, each `POST /reset` and `POST /step` typically constructs a **new** environment instance for that request, so **back-to-back HTTP calls do not share one in-memory episode** (each `/step` only runs **one** action on that instance). Ghostexec **primes** an empty instance by loading the scenario before applying your action, so a lone `POST /step` still produces a real reward and `observation.metadata` (for example `step_ok`). For **many steps on the same running episode** (step 2, 3, … on unchanged state), use **`WebSocket /ws`**: open a connection, send reset, then send step messages on that same socket (or use a client that keeps a WebSocket session, for example `GhostexecEnv` over `base_url`).
+Endpoints (typical OpenEnv layout): **`/web`**, **`/docs`**, **`/health`**, **`/ws`**.
 
-## Environment Details
+---
 
-### Action
-**GhostexecAction**: Contains a single field
-- `message` (str) - The message to echo back
-
-### Observation
-**GhostexecObservation**: Contains the echo response and metadata
-- `echoed_message` (str) - The message echoed back
-- `message_length` (int) - Length of the message
-- `reward` (float) - Reward based on message length (length × 0.1)
-- `done` (bool) - Always False for echo environment
-- `metadata` (dict) - Additional info like step count
-
-### Reward
-The reward is calculated as: `message_length × 0.1`
-- "Hi" → reward: 0.2
-- "Hello, World!" → reward: 1.3
-- Empty message → reward: 0.0
-
-## Advanced Usage
-
-### Connecting to an Existing Server
-
-If you already have a Ghostexec environment server running, you can connect directly:
-
-```python
-from ghostexec import GhostexecEnv
-
-# Connect to existing server
-ghostexecenv = GhostexecEnv(base_url="<ENV_HTTP_URL_HERE>")
-
-# Use as normal
-result = ghostexecenv.reset()
-result = ghostexecenv.step(GhostexecAction(message="Hello!"))
-```
-
-Note: When connecting to an existing server, `ghostexecenv.close()` will NOT stop the server.
-
-### Using the Context Manager
-
-The client supports context manager usage for automatic connection management:
-
-```python
-from ghostexec import GhostexecAction, GhostexecEnv
-
-# Connect with context manager (auto-connects and closes)
-with GhostexecEnv(base_url="http://localhost:8000") as env:
-    result = env.reset()
-    print(f"Reset: {result.observation.echoed_message}")
-    # Multiple steps with low latency
-    for msg in ["Hello", "World", "!"]:
-        result = env.step(GhostexecAction(message=msg))
-        print(f"Echoed: {result.observation.echoed_message}")
-```
-
-The client uses WebSocket connections for:
-- **Lower latency**: No HTTP connection overhead per request
-- **Persistent session**: Server maintains your environment state
-- **Efficient for episodes**: Better for many sequential steps
-
-### Concurrent WebSocket Sessions
-
-The server supports multiple concurrent WebSocket connections. To enable this,
-modify `server/app.py` to use factory mode:
-
-```python
-# In server/app.py - use factory mode for concurrent sessions
-app = create_app(
-    GhostexecEnvironment,  # Pass class, not instance
-    GhostexecAction,
-    GhostexecObservation,
-    max_concurrent_envs=4,  # Allow 4 concurrent sessions
-)
-```
-
-Then multiple clients can connect simultaneously:
-
-```python
-from ghostexec import GhostexecAction, GhostexecEnv
-from concurrent.futures import ThreadPoolExecutor
-
-def run_episode(client_id: int):
-    with GhostexecEnv(base_url="http://localhost:8000") as env:
-        result = env.reset()
-        for i in range(10):
-            result = env.step(GhostexecAction(message=f"Client {client_id}, step {i}"))
-        return client_id, result.observation.message_length
-
-# Run 4 episodes concurrently
-with ThreadPoolExecutor(max_workers=4) as executor:
-    results = list(executor.map(run_episode, range(4)))
-```
-
-## Development & Testing
-
-### Direct Environment Testing
-
-Test the environment logic directly without starting the HTTP server:
+## Running and testing locally
 
 ```bash
-# From the server directory
-python3 server/ghostexec_environment.py
-```
-
-This verifies that:
-- Environment resets correctly
-- Step executes actions properly
-- State tracking works
-- Rewards are calculated correctly
-
-### Running Locally
-
-From the **`ghostexec`** directory (where `pyproject.toml` and `models.py` live):
-
-```bash
-# Recommended (matches installed package layout)
+# Dev server (package layout)
 uv run uvicorn ghostexec.server.app:app --reload --host 0.0.0.0 --port 8000
 
-# Same as many HF / OpenEnv docs (`models` + `server` on cwd)
-uv run uvicorn server.app:app --reload --host 0.0.0.0 --port 8000
+# Or console entrypoint (matches Dockerfile)
+uv run server --port 8000
 ```
 
-Or use the console script: `uv run server --port 8000`.
+**Smoke script** (HTTP):
 
-**CLI endpoint smoke** (no browser): in-process — `uv run python scripts/http_endpoint_smoke.py --local`  
-Against a running server — `uv run python scripts/http_endpoint_smoke.py --url http://127.0.0.1:8000`  
-Print example `curl` lines — `uv run python scripts/http_endpoint_smoke.py --print-curl`
+```bash
+uv run python scripts/http_endpoint_smoke.py --local
+uv run python scripts/http_endpoint_smoke.py --url http://127.0.0.1:8000
+uv run python scripts/http_endpoint_smoke.py --print-curl
+```
 
-## Complete stack test
-
-Run the full suite (including HTTP/WebSocket/OpenEnv routes and a nested run of all other tests):
+**Tests:**
 
 ```bash
 uv run pytest tests/ -q
 ```
 
-With **`uvicorn` already running** on port 8000, hammer every HTTP edge case + WebSocket dead-ends:
+With the server already on port 8000:
 
 ```bash
 uv run pytest tests/test_live_server_exhaustive.py -v --tb=short
 ```
 
-Override base URL: `set GHOSTEXEC_LIVE_BASE_URL=http://127.0.0.1:9000` then the same command. If nothing is listening, all tests **skip**.
+Override live URL (Windows PowerShell example):
 
-Optional live client check (real TCP WebSocket, not `TestClient`):
+```powershell
+$env:GHOSTEXEC_LIVE_BASE_URL = "http://127.0.0.1:9000"
+uv run pytest tests/test_live_server_exhaustive.py -q
+```
+
+Optional real WebSocket client check:
 
 ```bash
 # Terminal 1
@@ -273,33 +168,85 @@ set GHOSTEXEC_WS_BASE_URL=http://127.0.0.1:8000
 uv run pytest tests/test_complete_integration.py::test_ghostexec_env_client_against_live_url_if_set -q
 ```
 
-## Phase 5 — training and Colab
+---
 
-- **Train locally (logs JSONL episode returns):**  
-  `uv run python training/train.py --backend local --agent reinforce --episodes 30 --max-steps 14`  
-  Use `--agent smart` for a scripted executive policy demo, or install optional LM stack: `uv sync --extra training`.
-- **Colab (reward curve demo):** open `training/ghostexec_colab.ipynb` with the notebook working directory set to this `ghostexec` folder (so `pyproject.toml` is visible), then **Run All**.
-- **Phase 5b — Unsloth / TRL post-training + GRPO (Colab, GPU):** open `training/ghostexec_unsloth_grpo_colab.ipynb`. It installs [Unsloth](https://github.com/unslothai/unsloth) + TRL, optional **SFT** on synthetic `(briefing → JSON action)` pairs, then **GRPO** with reward from a real `GhostexecEnvironment` first step (see [Unsloth RL guide](https://unsloth.ai/docs/get-started/reinforcement-learning-rl-guide)). Use a **GPU** runtime (T4+); default knobs are small so **Run All** can finish in one session—increase `GHOSTEXEC_GRPO_MAX_STEPS`, `GHOSTEXEC_SFT_SAMPLES`, etc. via environment variables documented in the first code cell. Set `GITHUB_REPO_URL` to your public git URL when the notebook is not already inside the repo. Helpers: `training/llm_action_parse.py`, `training/grpo_ghostexec_reward.py`.
-- **Demo scenarios:** `scenarios/monday_morning.json`, `dinner_disaster.json`, `vip_meltdown.json` (+ `vip_meltdown_drift.json` for mood escalation).
-- **HF blog paste-up:** see `training/HF_BLOG_DRAFT.md`.
+## Hugging Face Spaces
 
-## Project Structure
+Deploy with the OpenEnv CLI from this directory:
+
+```bash
+openenv push
+# openenv push --repo-id your-username/ghostexec
+```
+
+Use a **public** Space for the default hackathon flow unless you intentionally need a private Space. Authenticate with Hugging Face first (`huggingface-cli login` or equivalent).
+
+---
+
+## Training
+
+**Local scripted RL** (writes under `outputs/` — gitignored):
+
+```bash
+uv run python training/train.py --backend local --agent reinforce --episodes 30 --max-steps 14
+uv run python training/train.py --backend local --agent smart --episodes 10 --max-steps 14
+```
+
+Optional LM stack: `uv sync --extra training`.
+
+**Colab — reward demo:** `training/ghostexec_colab.ipynb` (set the notebook working directory to this repo so `pyproject.toml` is visible), then **Run All**.
+
+**Colab — Unsloth + TRL + GRPO:** `training/ghostexec_unsloth_grpo_colab.ipynb`  
+Use a **GPU** runtime (e.g. T4+). Tune knobs via environment variables in the first code cell, for example:
+
+- `GHOSTEXEC_REPO_URL` — Public git URL to `git clone` when the repo is not already on the VM (e.g. `https://github.com/false200/ghostexec.git`).
+- `GHOSTEXEC_RUN_SFT` — Set to `0` to skip optional SFT.
+- `GHOSTEXEC_SFT_SAMPLES`, `GHOSTEXEC_SFT_MAX_STEPS`, `GHOSTEXEC_GRPO_ROWS`, `GHOSTEXEC_GRPO_MAX_STEPS`, `GHOSTEXEC_NUM_GENERATIONS`, `GHOSTEXEC_MODEL`, `GHOSTEXEC_MAX_SEQ`.
+
+Helpers: `training/llm_action_parse.py`, `training/grpo_ghostexec_reward.py`.  
+HF-facing write-up draft: `training/HF_BLOG_DRAFT.md`.
+
+---
+
+## Scenarios
+
+| File | Role |
+|------|------|
+| `scenarios/phase2_core.json` | Default dense inbox/calendar/tasks fixture |
+| `scenarios/monday_morning.json`, `dinner_disaster.json`, `vip_meltdown.json` | Narrative demos |
+| `scenarios/vip_meltdown_drift.json` | Mood / escalation drift |
+| `scenarios/schema_drift_test.json` | Drift-event harness |
+
+---
+
+## Concurrent WebSocket sessions
+
+`server/app.py` passes **`GhostexecEnvironment`** (the class) into `create_app` with `max_concurrent_envs=1` by default. Increase `max_concurrent_envs` if you need multiple simultaneous WebSocket clients.
+
+---
+
+## Project layout
 
 ```
 ghostexec/
-├── .dockerignore         # Docker build exclusions
-├── __init__.py            # Module exports
-├── README.md              # This file
-├── openenv.yaml           # OpenEnv manifest
-├── pyproject.toml         # Project metadata and dependencies
-├── uv.lock                # Locked dependencies (generated)
-├── training/              # Phase 5: train.py, Colab notebooks (reward + Unsloth GRPO), HF blog draft
-├── scenarios/             # World JSON (incl. monday_morning, dinner_disaster, vip_meltdown)
-├── client.py              # GhostexecEnv client
-├── models.py              # Action and Observation models
+├── openenv.yaml           # OpenEnv name, version, description
+├── pyproject.toml         # Package metadata + optional [training]
+├── uv.lock
+├── models.py              # World + GhostexecAction / GhostexecObservation
+├── client.py              # GhostexecEnv (WebSocket client)
+├── scenarios/             # World JSON (source of truth for episodes)
+├── training/              # train.py, Colab notebooks, GRPO reward
+├── scripts/               # http_endpoint_smoke.py
+├── tests/
 └── server/
-    ├── __init__.py        # Server module exports
-    ├── ghostexec_environment.py  # Core environment logic
-    ├── app.py             # FastAPI application (HTTP + WebSocket endpoints)
-    └── Dockerfile         # Container image definition
+    ├── app.py             # FastAPI + create_app
+    ├── ghostexec_environment.py
+    ├── reward.py
+    └── Dockerfile
 ```
+
+---
+
+## License
+
+BSD-style — see the license notice at the top of each source file (Meta / OpenEnv lineage).
