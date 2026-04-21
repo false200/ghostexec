@@ -203,6 +203,8 @@ Uses the same **`uv` + Unsloth-from-git + pinned `transformers==4.56.2` / `trl==
 - `GHOSTEXEC_RUN_SFT` — Set to `0` to skip optional SFT.
 - `GHOSTEXEC_SFT_SAMPLES`, `GHOSTEXEC_SFT_MAX_STEPS`, `GHOSTEXEC_GRPO_ROWS`, `GHOSTEXEC_GRPO_MAX_STEPS`, `GHOSTEXEC_NUM_GENERATIONS`, `GHOSTEXEC_MODEL`, `GHOSTEXEC_MAX_SEQ`.
 
+The **GRPO** notebook cell **re-reads** `GHOSTEXEC_GRPO_MAX_STEPS`, `GHOSTEXEC_GRPO_ROWS`, and `GHOSTEXEC_NUM_GENERATIONS` from `os.environ` right before building `GRPOConfig`, so setting those env vars in an earlier cell still applies even if you did not re-run the knobs cell (look for the printed `GRPO (env re-sync): ...` line).
+
 Helpers: `training/llm_action_parse.py`, `training/grpo_ghostexec_reward.py`.
 
 **Kaggle:** enable **Internet** in notebook settings if you use `git clone` from GitHub. If you use a **Dataset** instead (repo under `/kaggle/input/...`), run the **Notebook bootstrap** cell in `ghostexec_unsloth_grpo_colab.ipynb` right after the repository cell so `from ghostexec...` resolves (`notebook_setup.py` at repo root runs `pip install -e .` from the detected root). Otherwise you may see `ModuleNotFoundError: No module named 'ghostexec'` while `cwd` stays `/kaggle/working`.
@@ -244,7 +246,7 @@ Environment variables (set before running the GRPO cell):
 | `outputs/eval/before_sample.txt`, `outputs/eval/after_sample.txt` | Model's action on a fixed `phase2_core.json` briefing, before vs after. |
 | `outputs/eval/before_after.csv` | 7-row delta table: `mean_return`, `format_valid_rate`, `vip_critical_first_reply_rate`, `conflicts_resolved_rate`, and per-channel means. |
 
-Everything is produced by **Run All** on the notebook once `GHOSTEXEC_CONSTRAIN_JSON=1` (+ `pip install lm-format-enforcer`) and a sensible `GHOSTEXEC_GRPO_MAX_STEPS` are set in the knobs cell.
+Everything is produced by **Run All** on the notebook once `GHOSTEXEC_CONSTRAIN_JSON=1` (+ `pip install lm-format-enforcer`) and a sensible `GHOSTEXEC_GRPO_MAX_STEPS` are set **before the GRPO cell** (knobs cell or any earlier cell — GRPO re-reads env).
 
 **OpenEnv + TRL (advanced, matches Meta tutorial):** [OpenEnv 04-training — Wordle GRPO](https://github.com/meta-pytorch/OpenEnv/blob/main/tutorial/04-training.md) describes `rollout_func`, `generate_rollout_completions`, and split `reward_funcs` that read kwargs from the rollout. Ghostexec mirrors that in `training/openenv_grpo_rollout.py` (`ghostexec_rollout_func`, `reward_ghostexec_parse_ok`, `reward_ghostexec_env_step`) when your TRL build includes `trl.experimental.openenv` (recent `trl` + `datasets`; not the same as the Colab pin `trl==0.22.2`, which keeps the simpler scalar reward in `ghostexec_unsloth_grpo_colab.ipynb`).
 
