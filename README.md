@@ -203,7 +203,10 @@ Uses the same **`uv` + Unsloth-from-git + pinned `transformers==4.56.2` / `trl==
 - `GHOSTEXEC_RUN_SFT` — Set to `0` to skip optional SFT.
 - `GHOSTEXEC_SFT_SAMPLES`, `GHOSTEXEC_SFT_MAX_STEPS`, `GHOSTEXEC_GRPO_ROWS`, `GHOSTEXEC_GRPO_MAX_STEPS`, `GHOSTEXEC_NUM_GENERATIONS`, `GHOSTEXEC_MODEL`, `GHOSTEXEC_MAX_SEQ`.
 
-Helpers: `training/llm_action_parse.py`, `training/grpo_ghostexec_reward.py`.  
+Helpers: `training/llm_action_parse.py`, `training/grpo_ghostexec_reward.py`.
+
+**OpenEnv + TRL (advanced, matches Meta tutorial):** [OpenEnv 04-training — Wordle GRPO](https://github.com/meta-pytorch/OpenEnv/blob/main/tutorial/04-training.md) describes `rollout_func`, `generate_rollout_completions`, and split `reward_funcs` that read kwargs from the rollout. Ghostexec mirrors that in `training/openenv_grpo_rollout.py` (`ghostexec_rollout_func`, `reward_ghostexec_parse_ok`, `reward_ghostexec_env_step`) when your TRL build includes `trl.experimental.openenv` (recent `trl` + `datasets`; not the same as the Colab pin `trl==0.22.2`, which keeps the simpler scalar reward in `ghostexec_unsloth_grpo_colab.ipynb`).
+
 HF-facing write-up draft: `training/HF_BLOG_DRAFT.md`.
 
 ---

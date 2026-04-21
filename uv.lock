@@ -2806,6 +2806,7 @@ dev = [
 ]
 training = [
     { name = "accelerate" },
+    { name = "datasets" },
     { name = "matplotlib" },
     { name = "torch" },
     { name = "transformers" },
@@ -2815,6 +2816,7 @@ training = [
 [package.metadata]
 requires-dist = [
     { name = "accelerate", marker = "extra == 'training'", specifier = ">=0.27" },
+    { name = "datasets", marker = "extra == 'training'", specifier = ">=2.16.0" },
     { name = "matplotlib", marker = "extra == 'training'", specifier = ">=3.8" },
     { name = "openenv-core", extras = ["core"], specifier = ">=0.2.2" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },

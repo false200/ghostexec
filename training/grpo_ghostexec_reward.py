@@ -1,6 +1,11 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # Callable reward for TRL GRPOTrainer: first Ghostexec step from a deterministic reset.
+#
+# For the OpenEnv + TRL pattern (``rollout_func`` + ``generate_rollout_completions`` +
+# multiple ``reward_funcs`` reading kwargs), see Meta's tutorial and
+# ``training/openenv_grpo_rollout.py``:
+# https://github.com/meta-pytorch/OpenEnv/blob/main/tutorial/04-training.md
 
 from __future__ import annotations
 

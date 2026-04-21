@@ -1,9 +1,12 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # Phase 5A: episode training loop with reward logging and optional checkpoints.
-# Default path uses the in-process GhostexecEnvironment (no GPU). For GRPO/PPO on
-# an LLM, install optional extras: `uv sync --extra training` and extend this
-# script with Hugging Face TRL (see project README Phase 5).
+# Default path uses the in-process GhostexecEnvironment (no GPU). For LLM + GRPO
+# on Hugging Face TRL, see Meta OpenEnv tutorial 04-training (Wordle GRPO pattern)
+# https://github.com/meta-pytorch/OpenEnv/blob/main/tutorial/04-training.md
+# and this repo's ``training/openenv_grpo_rollout.py`` (rollout_func) +
+# ``training/grpo_ghostexec_reward.py`` (simple scalar reward). Install:
+# ``uv sync --extra training``.
 
 from __future__ import annotations
 
@@ -399,8 +402,9 @@ def main() -> None:
 
         if importlib.util.find_spec("trl") is not None:
             print(
-                "Optional TRL is installed. For full LM + PPO/GRPO, wire a policy model here "
-                "(see https://huggingface.co/docs/trl).",
+                "Optional TRL is installed. For GRPO: OpenEnv tutorial 04-training + "
+                "https://huggingface.co/docs/trl — use training/openenv_grpo_rollout.py "
+                "(rollout_func) or training/grpo_ghostexec_reward.py (scalar reward).",
                 file=sys.stderr,
             )
     except Exception:
