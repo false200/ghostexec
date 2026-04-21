@@ -197,7 +197,7 @@ Optional LM stack: `uv sync --extra training`.
 **Colab — reward demo:** `training/ghostexec_colab.ipynb` (set the notebook working directory to this repo so `pyproject.toml` is visible), then **Run All**.
 
 **Colab — Unsloth + TRL + GRPO:** `training/ghostexec_unsloth_grpo_colab.ipynb`  
-Use a **GPU** runtime (e.g. T4+). Tune knobs via environment variables in the first code cell, for example:
+Uses the same **`uv` + Unsloth-from-git + pinned `transformers==4.56.2` / `trl==0.22.2`** pattern as Unsloth’s [OpenEnv 2048 GRPO notebook](https://colab.research.google.com/github/unslothai/notebooks/blob/main/nb/OpenEnv_gpt_oss_(20B)_Reinforcement_Learning_2048_Game.ipynb) so `GRPOTrainer` imports reliably on Colab (avoids newer TRL + `mergekit` / Pydantic issues). Use a **GPU** runtime (e.g. T4+). Tune knobs via environment variables in the knobs cell, for example:
 
 - `GHOSTEXEC_REPO_URL` — Public git URL to `git clone` when the repo is not already on the VM (e.g. `https://github.com/false200/ghostexec.git`).
 - `GHOSTEXEC_RUN_SFT` — Set to `0` to skip optional SFT.
