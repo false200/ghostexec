@@ -205,6 +205,8 @@ Uses the same **`uv` + Unsloth-from-git + pinned `transformers==4.56.2` / `trl==
 
 Helpers: `training/llm_action_parse.py`, `training/grpo_ghostexec_reward.py`.
 
+**Kaggle:** enable **Internet** in notebook settings if you use `git clone` from GitHub. If you use a **Dataset** instead (repo under `/kaggle/input/...`), run the **Notebook bootstrap** cell in `ghostexec_unsloth_grpo_colab.ipynb` right after the repository cell so `from ghostexec...` resolves (`notebook_setup.py` at repo root runs `pip install -e .` from the detected root). Otherwise you may see `ModuleNotFoundError: No module named 'ghostexec'` while `cwd` stays `/kaggle/working`.
+
 **Reward channels + anti-hacking knobs.** The Colab GRPO cell now passes a **list** of reward functions so GRPO averages across them while the core 0.35 / 0.35 / 0.30 conflict/relationship/task blend stays intact inside the env step reward:
 
 - `ghostexec_env_step_reward` — parse JSON → fresh env reset → one `step()` (plus optional k-step scripted lookahead).
