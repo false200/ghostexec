@@ -36,7 +36,15 @@ def openenv_rollout_stack_available() -> bool:
     global _HAS_OPENENV_ROLLOUT
     if _HAS_OPENENV_ROLLOUT is not None:
         return _HAS_OPENENV_ROLLOUT
-    _HAS_OPENENV_ROLLOUT = importlib.util.find_spec("trl.experimental.openenv") is not None
+    try:
+        if importlib.util.find_spec("trl") is None:
+            _HAS_OPENENV_ROLLOUT = False
+            return _HAS_OPENENV_ROLLOUT
+        _HAS_OPENENV_ROLLOUT = (
+            importlib.util.find_spec("trl.experimental.openenv") is not None
+        )
+    except (ImportError, ValueError, ModuleNotFoundError):
+        _HAS_OPENENV_ROLLOUT = False
     return _HAS_OPENENV_ROLLOUT
 
 
@@ -144,12 +152,109 @@ def rollout_once_ghostexec(
     }
 
 
+def rollout_multiturn_ghostexec(
+    trainer: Any,
+    env: GhostexecEnvironment,
+    tokenizer: Any,
+    dataset_prompt: str,
+    *,
+    num_turns: int = 3,
+    gamma: float = 0.9,
+    system_prompt: str | None = None,
+    follow_up_instruction: str = (
+        "The previous action was executed. Here is the updated briefing. "
+        "Respond with exactly one JSON object for the next executive action."
+    ),
+) -> dict[str, Any]:
+    """Multi-turn Ghostexec episode using the OpenEnv ``generate_rollout_completions`` path.
+
+    Each turn: build a chat-template prompt from the current briefing, let the
+    trainer's generator sample a completion, parse + step the env, continue
+    until ``done`` or ``num_turns`` turns. Returns the *last turn's* token
+    stream plus aggregated per-episode signals; TRL reward funcs read the
+    aggregates from kwargs.
+
+    Attribution note: we return the last turn's ``prompt_ids`` / ``completion_ids``
+    / ``logprobs`` because TRL's OpenEnv path expects a single
+    (prompt, completion, logprobs) triple per sample. The whole-episode
+    discounted reward still gets credited to that final action — consistent
+    with how the 2048 Wordle tutorial attributes rollout returns.
+    """
+    generate_rollout_completions = _get_generate_rollout_completions()
+    sys_prompt = system_prompt or GHOSTEXEC_SYSTEM_PROMPT
+    task = dataset_prompt.strip() if dataset_prompt.strip() else DEFAULT_TASK_PROMPT
+
+    obs = env.reset()
+    per_turn_rewards: list[float] = []
+    per_turn_parse_ok: list[float] = []
+    last_prompt_ids: list[int] = []
+    last_completion_ids: list[int] = []
+    last_logprobs: list[float] = []
+
+    for turn in range(max(1, num_turns)):
+        briefing = obs.echoed_message or ""
+        user_header = task if turn == 0 else follow_up_instruction
+        user_content = f"{user_header}\n\n=== BRIEFING ===\n{briefing}"
+        messages = [
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": user_content},
+        ]
+        try:
+            prompt_text = tokenizer.apply_chat_template(
+                messages,
+                add_generation_prompt=True,
+                tokenize=False,
+                enable_thinking=False,
+            )
+        except TypeError:
+            prompt_text = tokenizer.apply_chat_template(
+                messages,
+                add_generation_prompt=True,
+                tokenize=False,
+            )
+
+        rollout_out = generate_rollout_completions(trainer, [prompt_text])[0]
+        last_prompt_ids = list(rollout_out["prompt_ids"])
+        last_completion_ids = list(rollout_out["completion_ids"])
+        last_logprobs = list(rollout_out["logprobs"])
+        completion_text = rollout_out.get("text") or tokenizer.decode(
+            rollout_out["completion_ids"], skip_special_tokens=True
+        )
+
+        parsed = parse_completion_to_action(completion_text)
+        per_turn_parse_ok.append(1.0 if parsed is not None else 0.0)
+        act = parsed if parsed is not None else GhostexecAction(action_type="do_nothing")
+        obs = env.step(act)
+        per_turn_rewards.append(float(obs.reward or 0.0))
+        if obs.done:
+            break
+
+    total = 0.0
+    discount = 1.0
+    for r in per_turn_rewards:
+        total += discount * r
+        discount *= gamma
+
+    return {
+        "prompt_ids": last_prompt_ids,
+        "completion_ids": last_completion_ids,
+        "logprobs": last_logprobs,
+        "parse_ok": sum(per_turn_parse_ok) / max(1, len(per_turn_parse_ok)),
+        "env_step_reward": total,
+        "num_turns_run": float(len(per_turn_rewards)),
+    }
+
+
 def ghostexec_rollout_func(prompts: list[str], trainer: Any = None) -> dict[str, Any]:
     """
     TRL ``rollout_func`` entrypoint (same contract as OpenEnv Wordle tutorial).
 
     Uses a single in-process :class:`GhostexecEnvironment` (scenario from
     ``GHOSTEXEC_GRPO_SCENARIO`` or ``phase2_core.json``).
+
+    Multi-turn mode: set ``GHOSTEXEC_ROLLOUT_TURNS`` (default ``1``) to run
+    multiple model turns per episode via ``rollout_multiturn_ghostexec``.
+    Discount controlled by ``GHOSTEXEC_ROLLOUT_GAMMA`` (default ``0.9``).
     """
     if trainer is None:
         raise ValueError("ghostexec_rollout_func requires trainer= from GRPOTrainer.")
@@ -171,14 +276,36 @@ def ghostexec_rollout_func(prompts: list[str], trainer: Any = None) -> dict[str,
     episode_logprobs: list[Any] = []
     parse_oks: list[float] = []
     step_rewards: list[float] = []
+    turns_run: list[float] = []
+
+    try:
+        num_turns = max(1, int(os.environ.get("GHOSTEXEC_ROLLOUT_TURNS", "1")))
+    except ValueError:
+        num_turns = 1
+    try:
+        gamma = float(os.environ.get("GHOSTEXEC_ROLLOUT_GAMMA", "0.9"))
+    except ValueError:
+        gamma = 0.9
 
     for prompt_text in prompts:
-        episode = rollout_once_ghostexec(
-            trainer,
-            env,
-            tokenizer,
-            prompt_text,
-        )
+        if num_turns > 1:
+            episode = rollout_multiturn_ghostexec(
+                trainer,
+                env,
+                tokenizer,
+                prompt_text,
+                num_turns=num_turns,
+                gamma=gamma,
+            )
+            turns_run.append(float(episode.get("num_turns_run", 1.0)))
+        else:
+            episode = rollout_once_ghostexec(
+                trainer,
+                env,
+                tokenizer,
+                prompt_text,
+            )
+            turns_run.append(1.0)
         episode_prompt_ids.append(episode["prompt_ids"])
         episode_completion_ids.append(episode["completion_ids"])
         episode_logprobs.append(episode["logprobs"])
@@ -191,6 +318,7 @@ def ghostexec_rollout_func(prompts: list[str], trainer: Any = None) -> dict[str,
         "logprobs": episode_logprobs,
         "parse_ok": parse_oks,
         "env_step_reward": step_rewards,
+        "num_turns_run": turns_run,
     }
 
 

@@ -205,6 +205,45 @@ Uses the same **`uv` + Unsloth-from-git + pinned `transformers==4.56.2` / `trl==
 
 Helpers: `training/llm_action_parse.py`, `training/grpo_ghostexec_reward.py`.
 
+**Reward channels + anti-hacking knobs.** The Colab GRPO cell now passes a **list** of reward functions so GRPO averages across them while the core 0.35 / 0.35 / 0.30 conflict/relationship/task blend stays intact inside the env step reward:
+
+- `ghostexec_env_step_reward` — parse JSON → fresh env reset → one `step()` (plus optional k-step scripted lookahead).
+- `reward_format_valid` — ±1 if the completion parses to a `GhostexecAction`.
+- `reward_group_diversity` — penalizes duplicate completions inside a GRPO group (kills collapse to one safe JSON).
+- `reward_id_relevance` — small penalty when `email_id` / `task_id` / `meeting_id` don’t exist in the scenario.
+- `reward_vip_critical_reply_bonus` — bonus for replying to a VIP + critical + unreplied email.
+
+Environment variables (set before running the GRPO cell):
+
+| Var | Effect |
+|-----|--------|
+| `GHOSTEXEC_GRPO_SCENARIO` | Pin the reward scenario to one file. |
+| `GHOSTEXEC_CURRICULUM` | Rotate over `easy` \| `mid` \| `hard` \| `all` (`training/scenarios_sampler.py`). |
+| `GHOSTEXEC_PERTURB=1` | Shuffle list order (+ optional time shift) per call. |
+| `GHOSTEXEC_REWARD_KSTEPS` | k scripted follow-up steps (`smart_action`) to score long-term consequences. |
+| `GHOSTEXEC_REWARD_GAMMA` | Discount for those follow-up steps (default 0.9). |
+
+**Rejection-sampled SFT** (`training/rejection_sft.py`): generate `(briefing, smart_action JSON)` pairs across scenarios, filter to the top quantile by env reward, feed that into `SFTTrainer`. Faster convergence than raw demos.
+
+**Held-out evaluation** (`training/eval_harness.py`): run N episodes on `EVAL_SCENARIOS` (`vip_meltdown.json`) after training, report mean return, format-valid rate, VIP-critical-reply rate, conflicts-resolved rate, and per-channel averages (conflict / relationship / task). Reward-hackers show up as “task up, relationship down”.
+
+**Constrained decoding** (`training/constrained_decode.py`): `patch_model_for_json_generation(model, tokenizer)` monkey-patches `model.generate` so every call (including the ones TRL's `GRPOTrainer` samples) is constrained to the `GhostexecAction` JSON schema. Backends are optional: install `lm-format-enforcer` (preferred — works with the Unsloth tokenizer as-is via `prefix_allowed_tokens_fn`) or `outlines` (HF `LogitsProcessorList`). In the Colab notebook set `GHOSTEXEC_CONSTRAIN_JSON=1` before the constrained-decode cell. Every sampled completion then already parses — the reward reflects policy quality, not syntax luck.
+
+**Multi-turn reward** (`training/multiturn_reward.py`): `make_multiturn_reward(model, tokenizer, num_turns=3, gamma=0.9)` returns a TRL-compatible reward function that rolls out an entire episode for each GRPO sample: the completion is turn 1, then the model itself generates k-1 follow-up JSON actions, each stepping the env. Reward is the discounted sum. Credits "first actions that enable good follow-ups" instead of one-shot tricks. Toggle via `GHOSTEXEC_MULTITURN=1` (with `GHOSTEXEC_MULTITURN_TURNS`, `GHOSTEXEC_MULTITURN_GAMMA`). For the full OpenEnv `rollout_func` path, `training/openenv_grpo_rollout.py::rollout_multiturn_ghostexec` runs the same pattern through `generate_rollout_completions` when `GHOSTEXEC_ROLLOUT_TURNS>1`.
+
+**Observable evidence of training progress.** The Colab notebook produces a self-contained artifact bundle under `outputs/` so reviewers can see that GRPO actually moved the policy:
+
+| Artifact | What it shows |
+|----------|---------------|
+| `outputs/plots/grpo_reward_curve.png` | Mean reward over GRPO log steps. |
+| `outputs/plots/grpo_reward_channels.png` | Per-channel reward (env step / format / diversity / id-relevance / VIP-critical) — detects hacking. |
+| `outputs/eval/llm_before.json`, `outputs/eval/llm_after.json` | Same-schema held-out eval on `vip_meltdown.json` before and after training. |
+| `outputs/eval/scripted_baseline.json` | Reference baseline from the hand-written `smart_action` policy. |
+| `outputs/eval/before_sample.txt`, `outputs/eval/after_sample.txt` | Model's action on a fixed `phase2_core.json` briefing, before vs after. |
+| `outputs/eval/before_after.csv` | 7-row delta table: `mean_return`, `format_valid_rate`, `vip_critical_first_reply_rate`, `conflicts_resolved_rate`, and per-channel means. |
+
+Everything is produced by **Run All** on the notebook once `GHOSTEXEC_CONSTRAIN_JSON=1` (+ `pip install lm-format-enforcer`) and a sensible `GHOSTEXEC_GRPO_MAX_STEPS` are set in the knobs cell.
+
 **OpenEnv + TRL (advanced, matches Meta tutorial):** [OpenEnv 04-training — Wordle GRPO](https://github.com/meta-pytorch/OpenEnv/blob/main/tutorial/04-training.md) describes `rollout_func`, `generate_rollout_completions`, and split `reward_funcs` that read kwargs from the rollout. Ghostexec mirrors that in `training/openenv_grpo_rollout.py` (`ghostexec_rollout_func`, `reward_ghostexec_parse_ok`, `reward_ghostexec_env_step`) when your TRL build includes `trl.experimental.openenv` (recent `trl` + `datasets`; not the same as the Colab pin `trl==0.22.2`, which keeps the simpler scalar reward in `ghostexec_unsloth_grpo_colab.ipynb`).
 
 HF-facing write-up draft: `training/HF_BLOG_DRAFT.md`.

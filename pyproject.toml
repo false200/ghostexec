@@ -43,6 +43,13 @@ training = [
     "matplotlib>=3.8",
     "datasets>=2.16.0",
 ]
+# Optional JSON-schema-constrained decoding backends (pick one).
+constrained = [
+    "lm-format-enforcer>=0.10",
+]
+constrained-outlines = [
+    "outlines>=0.1",
+]
 
 [project.scripts]
 # Server entry point - enables running via: uv run --project . server
