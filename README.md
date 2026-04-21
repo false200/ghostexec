@@ -201,9 +201,9 @@ Uses the same **`uv` + Unsloth-from-git + pinned `transformers==4.56.2` / `trl==
 
 - `GHOSTEXEC_REPO_URL` — Public git URL to `git clone` when the repo is not already on the VM (e.g. `https://github.com/false200/ghostexec.git`).
 - `GHOSTEXEC_RUN_SFT` — Set to `0` to skip optional SFT.
-- `GHOSTEXEC_SFT_SAMPLES`, `GHOSTEXEC_SFT_MAX_STEPS`, `GHOSTEXEC_GRPO_ROWS`, `GHOSTEXEC_GRPO_MAX_STEPS`, `GHOSTEXEC_NUM_GENERATIONS`, `GHOSTEXEC_MODEL`, `GHOSTEXEC_MAX_SEQ`.
+- `GHOSTEXEC_SFT_SAMPLES`, `GHOSTEXEC_SFT_MAX_STEPS`, `GHOSTEXEC_GRPO_ROWS`, `GHOSTEXEC_GRPO_MAX_STEPS`, `GHOSTEXEC_NUM_GENERATIONS`, `GHOSTEXEC_GRPO_TEMPERATURE`, `GHOSTEXEC_GRPO_MAX_COMPLETION_LENGTH`, `GHOSTEXEC_GRPO_LR`, `GHOSTEXEC_MODEL`, `GHOSTEXEC_MAX_SEQ`.
 
-The **GRPO** notebook cell **re-reads** `GHOSTEXEC_GRPO_MAX_STEPS`, `GHOSTEXEC_GRPO_ROWS`, and `GHOSTEXEC_NUM_GENERATIONS` from `os.environ` right before building `GRPOConfig`, so setting those env vars in an earlier cell still applies even if you did not re-run the knobs cell (look for the printed `GRPO (env re-sync): ...` line).
+The **GRPO** notebook cell **re-reads** `GHOSTEXEC_GRPO_MAX_STEPS`, `GHOSTEXEC_GRPO_ROWS`, `GHOSTEXEC_NUM_GENERATIONS`, `GHOSTEXEC_GRPO_TEMPERATURE`, `GHOSTEXEC_GRPO_MAX_COMPLETION_LENGTH`, and `GHOSTEXEC_GRPO_LR` from `os.environ` right before building `GRPOConfig`, so setting those env vars in an earlier cell still applies even if you did not re-run the knobs cell (look for the printed `GRPO (env re-sync): ...` line).
 
 Helpers: `training/llm_action_parse.py`, `training/grpo_ghostexec_reward.py`.
 
