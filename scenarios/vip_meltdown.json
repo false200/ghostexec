@@ -1,0 +1,63 @@
+{
+  "simulation_time": "2026-04-21T09:00:00",
+  "stress": 44,
+  "active_conflicts": [],
+  "action_log": [
+    "VIP meltdown demo: external pressure escalates if ignored."
+  ],
+  "episode_active": true,
+  "episode_end_reason": null,
+  "max_episode_steps": 24,
+  "emails": [
+    {
+      "id": "v1",
+      "sender": "Taylor Brooks",
+      "subject": "We need alignment now",
+      "body": "Neutral opening: waiting on your stance before we brief others.",
+      "read": false,
+      "replied": false,
+      "priority": "critical",
+      "sender_relationship": "VIP"
+    }
+  ],
+  "meetings": [
+    {
+      "id": "vm1",
+      "title": "Investor sync",
+      "start": "2026-04-21T10:00:00",
+      "duration_minutes": 45,
+      "attendees": [
+        "Taylor Brooks"
+      ],
+      "location": "virtual",
+      "priority": "high",
+      "cancelled": false
+    }
+  ],
+  "contacts": [
+    {
+      "name": "Taylor Brooks",
+      "relationship_type": "investor",
+      "communication_preference": "call",
+      "importance": 4,
+      "mood": "neutral"
+    },
+    {
+      "name": "Jordan Lee",
+      "relationship_type": "direct_report",
+      "communication_preference": "email",
+      "importance": 3,
+      "mood": "happy"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "vt1",
+      "description": "Prep one-pager for Taylor",
+      "deadline": "2026-04-21T11:00:00",
+      "owner": "Self",
+      "status": "pending",
+      "effort": "medium"
+    }
+  ]
+}

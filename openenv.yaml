@@ -1,0 +1,9 @@
+spec_version: 1
+name: ghostexec
+version: "0.1.0"
+description: "GhostExec — RL training environment for personal and executive task conflict resolution (The AI Chief of Staff)."
+type: space
+runtime: fastapi
+app: server.app:app
+port: 8000
+

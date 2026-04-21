@@ -1,0 +1,27 @@
+{
+  "description": "Patronus-style schema drift bundle (three mid-episode rule changes).",
+  "events": [
+    {
+      "after_step": 1,
+      "shift_all_meetings_hours": 1,
+      "comment": "Scenario 1: calendar system shifts all local meeting times by +1 hour."
+    },
+    {
+      "after_step": 2,
+      "set_contact_preference": {
+        "name": "Sarah Chen",
+        "communication_preference": "text"
+      },
+      "comment": "Scenario 2: VIP/personal contact switches to text-only preference."
+    },
+    {
+      "after_step": 3,
+      "set_task_deadline": {
+        "task_id": "t02",
+        "deadline": "2026-04-21T07:00:00"
+      },
+      "suppress_reply_relationship_for_senders": ["Marcus Webb"],
+      "comment": "Scenario 3: task deadline moved earlier; Marcus email replies yield zero relationship score."
+    }
+  ]
+}

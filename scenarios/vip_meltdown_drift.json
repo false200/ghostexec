@@ -1,0 +1,25 @@
+{
+  "events": [
+    {
+      "after_step": 1,
+      "set_contact_mood": {
+        "name": "Taylor Brooks",
+        "mood": "annoyed"
+      }
+    },
+    {
+      "after_step": 2,
+      "set_contact_mood": {
+        "name": "Taylor Brooks",
+        "mood": "angry"
+      }
+    },
+    {
+      "after_step": 3,
+      "set_contact_mood": {
+        "name": "Taylor Brooks",
+        "mood": "furious"
+      }
+    }
+  ]
+}

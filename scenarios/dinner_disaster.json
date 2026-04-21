@@ -1,0 +1,107 @@
+{
+  "simulation_time": "2026-04-21T18:45:00",
+  "stress": 61,
+  "active_conflicts": [],
+  "action_log": [
+    "Client call ran long; dinner reservation at 19:00."
+  ],
+  "episode_active": true,
+  "episode_end_reason": null,
+  "max_episode_steps": 40,
+  "emails": [
+    {
+      "id": "d1",
+      "sender": "Sarah Chen",
+      "subject": "Dinner \u2014 I am at the restaurant",
+      "body": "We have held the table until 7:15. Please leave the call.",
+      "read": false,
+      "replied": false,
+      "priority": "high",
+      "sender_relationship": "personal"
+    },
+    {
+      "id": "d2",
+      "sender": "Taylor Brooks",
+      "subject": "Need sign-off tonight",
+      "body": "Board-adjacent ask: one paragraph on risk posture before morning.",
+      "read": false,
+      "replied": false,
+      "priority": "critical",
+      "sender_relationship": "VIP"
+    }
+  ],
+  "meetings": [
+    {
+      "id": "dc1",
+      "title": "Client escalation call",
+      "start": "2026-04-21T17:30:00",
+      "duration_minutes": 90,
+      "attendees": [
+        "David Okonkwo"
+      ],
+      "location": "virtual",
+      "priority": "high",
+      "cancelled": false
+    },
+    {
+      "id": "dc2",
+      "title": "Dinner reservation window",
+      "start": "2026-04-21T19:00:00",
+      "duration_minutes": 120,
+      "attendees": [
+        "Sarah Chen"
+      ],
+      "location": "Osteria",
+      "priority": "normal",
+      "cancelled": false
+    }
+  ],
+  "contacts": [
+    {
+      "name": "Sarah Chen",
+      "relationship_type": "spouse",
+      "communication_preference": "text",
+      "importance": 5,
+      "mood": "annoyed"
+    },
+    {
+      "name": "Taylor Brooks",
+      "relationship_type": "investor",
+      "communication_preference": "call",
+      "importance": 4,
+      "mood": "neutral"
+    },
+    {
+      "name": "David Okonkwo",
+      "relationship_type": "client",
+      "communication_preference": "email",
+      "importance": 4,
+      "mood": "angry"
+    },
+    {
+      "name": "Jordan Lee",
+      "relationship_type": "direct_report",
+      "communication_preference": "call",
+      "importance": 3,
+      "mood": "neutral"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "dt1",
+      "description": "Text Sarah ETA for dinner",
+      "deadline": "2026-04-21T18:50:00",
+      "owner": "Self",
+      "status": "pending",
+      "effort": "low"
+    },
+    {
+      "id": "dt2",
+      "description": "Send Taylor the risk paragraph",
+      "deadline": "2026-04-21T23:00:00",
+      "owner": "Self",
+      "status": "pending",
+      "effort": "medium"
+    }
+  ]
+}

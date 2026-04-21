@@ -1,0 +1,257 @@
+{
+  "simulation_time": "2026-04-22T07:00:00",
+  "stress": 84,
+  "active_conflicts": [],
+  "action_log": [
+    "Monday: board + investor travel + home commitments collide."
+  ],
+  "episode_active": true,
+  "episode_end_reason": null,
+  "max_episode_steps": 56,
+  "emails": [
+    {
+      "id": "mb1",
+      "sender": "Marcus Webb",
+      "subject": "Board deck \u2014 need numbers before market open",
+      "body": "We are missing revised Q3 figures. This is blocking the packet.",
+      "read": false,
+      "replied": false,
+      "priority": "critical",
+      "sender_relationship": "VIP"
+    },
+    {
+      "id": "mb2",
+      "sender": "Marcus Webb",
+      "subject": "Re: investor flight \u2014 your call",
+      "body": "Taylor is airborne in 4 hours. We need a decision on the alternate slot.",
+      "read": false,
+      "replied": false,
+      "priority": "critical",
+      "sender_relationship": "VIP"
+    },
+    {
+      "id": "mb3",
+      "sender": "Marcus Webb",
+      "subject": "Confidential \u2014 board sentiment",
+      "body": "Side channel: two directors are rattled. Your visible handling today matters.",
+      "read": false,
+      "replied": false,
+      "priority": "critical",
+      "sender_relationship": "VIP"
+    },
+    {
+      "id": "sp1",
+      "sender": "Sarah Chen",
+      "subject": "Dinner 7pm \u2014 please confirm",
+      "body": "Reservation is 7pm. If you are going to be late again, tell me now.",
+      "read": false,
+      "replied": false,
+      "priority": "high",
+      "sender_relationship": "personal"
+    },
+    {
+      "id": "fl1",
+      "sender": "Alex Rivera",
+      "subject": "Flight cancelled \u2014 investor dinner at risk",
+      "body": "Airline put me on a 6am tomorrow. Investor dinner prep is slipping.",
+      "read": false,
+      "replied": false,
+      "priority": "high",
+      "sender_relationship": "professional"
+    }
+  ],
+  "meetings": [
+    {
+      "id": "mx1",
+      "title": "Commitment block 1",
+      "start": "2026-04-22T07:00:00",
+      "duration_minutes": 60,
+      "attendees": [
+        "Marcus Webb"
+      ],
+      "location": "virtual",
+      "priority": "critical",
+      "cancelled": false
+    },
+    {
+      "id": "mx2",
+      "title": "Commitment block 2",
+      "start": "2026-04-22T07:00:00",
+      "duration_minutes": 60,
+      "attendees": [
+        "Taylor Brooks"
+      ],
+      "location": "virtual",
+      "priority": "critical",
+      "cancelled": false
+    },
+    {
+      "id": "mx3",
+      "title": "Commitment block 3",
+      "start": "2026-04-22T07:00:00",
+      "duration_minutes": 60,
+      "attendees": [
+        "Marcus Webb"
+      ],
+      "location": "virtual",
+      "priority": "high",
+      "cancelled": false
+    },
+    {
+      "id": "mx4",
+      "title": "Commitment block 4",
+      "start": "2026-04-22T07:00:00",
+      "duration_minutes": 60,
+      "attendees": [
+        "Taylor Brooks"
+      ],
+      "location": "virtual",
+      "priority": "high",
+      "cancelled": false
+    },
+    {
+      "id": "mx5",
+      "title": "Commitment block 5",
+      "start": "2026-04-22T07:00:00",
+      "duration_minutes": 60,
+      "attendees": [
+        "Marcus Webb"
+      ],
+      "location": "virtual",
+      "priority": "high",
+      "cancelled": false
+    },
+    {
+      "id": "mx6",
+      "title": "Commitment block 6",
+      "start": "2026-04-22T07:00:00",
+      "duration_minutes": 60,
+      "attendees": [
+        "Taylor Brooks"
+      ],
+      "location": "virtual",
+      "priority": "high",
+      "cancelled": false
+    },
+    {
+      "id": "m_pm",
+      "title": "Afternoon sync",
+      "start": "2026-04-22T15:00:00",
+      "duration_minutes": 30,
+      "attendees": [
+        "Jordan Lee"
+      ],
+      "location": "virtual",
+      "priority": "normal",
+      "cancelled": false
+    }
+  ],
+  "contacts": [
+    {
+      "name": "Marcus Webb",
+      "relationship_type": "board_member",
+      "communication_preference": "email",
+      "importance": 5,
+      "mood": "angry"
+    },
+    {
+      "name": "Sarah Chen",
+      "relationship_type": "spouse",
+      "communication_preference": "text",
+      "importance": 5,
+      "mood": "annoyed"
+    },
+    {
+      "name": "Taylor Brooks",
+      "relationship_type": "investor",
+      "communication_preference": "call",
+      "importance": 4,
+      "mood": "neutral"
+    },
+    {
+      "name": "Alex Rivera",
+      "relationship_type": "direct_report",
+      "communication_preference": "text",
+      "importance": 3,
+      "mood": "annoyed"
+    },
+    {
+      "name": "Jordan Lee",
+      "relationship_type": "direct_report",
+      "communication_preference": "call",
+      "importance": 3,
+      "mood": "happy"
+    },
+    {
+      "name": "Priya Sharma",
+      "relationship_type": "investor",
+      "communication_preference": "email",
+      "importance": 5,
+      "mood": "annoyed"
+    },
+    {
+      "name": "Elena Vogt",
+      "relationship_type": "team_member",
+      "communication_preference": "email",
+      "importance": 3,
+      "mood": "neutral"
+    },
+    {
+      "name": "David Okonkwo",
+      "relationship_type": "client",
+      "communication_preference": "email",
+      "importance": 4,
+      "mood": "neutral"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "ov1",
+      "description": "Finalize board packet figures",
+      "deadline": "2026-04-22T06:00:00",
+      "owner": "Self",
+      "status": "pending",
+      "effort": "high"
+    },
+    {
+      "id": "ov2",
+      "description": "Callback legal on redlines",
+      "deadline": "2026-04-22T05:30:00",
+      "owner": "Self",
+      "status": "pending",
+      "effort": "medium"
+    },
+    {
+      "id": "ov3",
+      "description": "Approve investor comms draft",
+      "deadline": "2026-04-22T06:15:00",
+      "owner": "Self",
+      "status": "pending",
+      "effort": "high"
+    },
+    {
+      "id": "ov4",
+      "description": "Expense report sign-off",
+      "deadline": "2026-04-22T04:00:00",
+      "owner": "Self",
+      "status": "overdue",
+      "effort": "low"
+    },
+    {
+      "id": "ov5",
+      "description": "Brief EA on calendar triage",
+      "deadline": "2026-04-22T05:00:00",
+      "owner": "Self",
+      "status": "overdue",
+      "effort": "low"
+    },
+    {
+      "id": "fu1",
+      "description": "Team social RSVP",
+      "deadline": "2026-04-25T12:00:00",
+      "owner": "Self",
+      "status": "pending",
+      "effort": "low"
+    }
+  ]
+}

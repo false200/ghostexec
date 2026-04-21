@@ -1,0 +1,61 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openenv-ghostexec"
+version = "0.1.0"
+description = "Ghostexec environment for OpenEnv"
+requires-python = ">=3.10"
+dependencies = [
+    # Core OpenEnv runtime (provides FastAPI server + HTTP client types)
+    # install from github
+    # "openenv-core[core] @ git+https://github.com/meta-pytorch/OpenEnv.git",
+    "openenv-core[core]>=0.2.2",
+    # Environment-specific dependencies
+    # Add all dependencies needed for your environment here
+    # Examples:
+    # "numpy>=1.19.0",
+    # "torch>=2.0.0",
+    # "gymnasium>=0.29.0",
+    # "openspiel>=1.0.0",
+    # "smolagents>=1.22.0,<2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.0.0",
+    "pyyaml>=6.0.0",
+]
+# Optional LM training stack (Phase 5 — extend training/train.py with TRL).
+training = [
+    "torch>=2.2,<3",
+    "transformers>=4.40",
+    "trl>=0.12.0",
+    "accelerate>=0.27",
+    "matplotlib>=3.8",
+]
+
+[project.scripts]
+# Server entry point - enables running via: uv run --project . server
+# or: python -m ghostexec.server.app
+server = "ghostexec.server.app:main"
+
+[tool.setuptools]
+include-package-data = true
+packages = ["ghostexec", "ghostexec.server"]
+package-dir = { "ghostexec" = ".", "ghostexec.server" = "server" }
+
+[tool.setuptools.package-data]
+ghostexec = ["scenarios/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
