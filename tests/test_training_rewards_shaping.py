@@ -85,3 +85,55 @@ def test_env_step_reward_honors_kstep_env_var(monkeypatch: pytest.MonkeyPatch) -
 def test_do_nothing_is_not_reward_preferred() -> None:
     good, nothing = ghostexec_env_step_reward([""], [REPLY_VIP_CRIT_E01, DO_NOTHING])
     assert good > nothing, "do_nothing must not out-score a valid VIP-critical reply"
+
+
+# --- PAR-style boundedness + anti-dead-signal jitter tests --------------------
+# The reward shaping paper (arXiv:2502.18770) argues an RL reward should be (1)
+# bounded and (2) exhibit rapid initial growth then gradual convergence. Our
+# ``ghostexec_env_step_reward`` wraps its raw output in ``tanh`` exactly for
+# that reason — below we assert the property is actually in effect.
+
+
+def test_env_step_reward_is_bounded_when_squash_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With squash on (default), every reward must land strictly inside (-1, 1)."""
+    monkeypatch.setenv("GHOSTEXEC_REWARD_SQUASH", "1")
+    monkeypatch.setenv("GHOSTEXEC_REWARD_JITTER", "0")
+    out = ghostexec_env_step_reward(
+        [""],
+        [REPLY_VIP_CRIT_E01, REPLY_INVALID_ID, DO_NOTHING, BROKEN],
+    )
+    for r in out:
+        assert -1.0 < r < 1.0, f"squashed reward {r} escaped (-1, 1)"
+
+
+def test_env_step_reward_squash_preserves_ordering(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``tanh`` is monotonic: a VIP-critical reply must still out-rank do_nothing."""
+    monkeypatch.setenv("GHOSTEXEC_REWARD_SQUASH", "1")
+    monkeypatch.setenv("GHOSTEXEC_REWARD_JITTER", "0")
+    good, nothing = ghostexec_env_step_reward([""], [REPLY_VIP_CRIT_E01, DO_NOTHING])
+    assert good > nothing
+
+
+def test_env_step_reward_jitter_breaks_zero_variance_groups(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Different-text but same-reward completions collapse to std=0; jitter breaks that."""
+    monkeypatch.setenv("GHOSTEXEC_REWARD_SQUASH", "1")
+    monkeypatch.setenv("GHOSTEXEC_REWARD_JITTER", "1")
+    monkeypatch.setenv("GHOSTEXEC_REWARD_JITTER_MAG", "1e-3")
+    # Three unparsable strings — all fall through to do_nothing and score
+    # identically, but the text hashes differ so jitter must separate them.
+    distinct = ["not json at all", "also not json", "still not parseable"]
+    out = ghostexec_env_step_reward([""], distinct)
+    assert len(set(out)) > 1, "jitter did not break the tie on zero-variance group"
+    spread = max(out) - min(out)
+    assert spread < 1e-2, f"jitter magnitude too large ({spread}); would teach noise"
+
+
+def test_env_step_reward_jitter_off_leaves_ties(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Disabling jitter keeps same-reward completions at identical rewards."""
+    monkeypatch.setenv("GHOSTEXEC_REWARD_SQUASH", "1")
+    monkeypatch.setenv("GHOSTEXEC_REWARD_JITTER", "0")
+    distinct = ["not json at all", "also not json", "still not parseable"]
+    out = ghostexec_env_step_reward([""], distinct)
+    assert len(set(out)) == 1

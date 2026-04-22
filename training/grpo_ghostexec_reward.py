@@ -14,9 +14,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import math
 import os
 import random
+import statistics
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +51,49 @@ def _env_float(name: str, default: float) -> float:
         return float(os.environ.get(name, str(default)).strip() or default)
     except ValueError:
         return default
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() not in ("", "0", "false", "no", "off")
+
+
+def _bounded_squash(raw: float, scale: float) -> float:
+    """PAR-style bounded reward transform (``tanh(raw / scale)``).
+
+    The "Reward Shaping to Mitigate Reward Hacking in RLHF" paper (PAR, 2025)
+    argues an RL reward should be (1) bounded and (2) exhibit rapid initial
+    growth followed by gradual convergence. ``tanh`` has exactly those two
+    properties, keeps the output in ``(-1, 1)``, and preserves sign / ordering
+    of the underlying raw reward, so GRPO advantages stay well-conditioned.
+    """
+    if scale <= 0:
+        return raw
+    return math.tanh(raw / scale)
+
+
+def _tie_break_jitter(texts: list[str], magnitude: float) -> list[float]:
+    """Return deterministic micro-jitter per completion text.
+
+    GRPO computes advantage as ``(reward - group_mean) / group_std``. When a
+    group's completions all produce an identical reward, ``group_std = 0`` so
+    the gradient signal is zero — the "dead signal" pattern behind the flat
+    reward curves we observed before. Adding a text-dependent jitter of order
+    1e-3 (much smaller than any real reward channel) breaks ties without
+    teaching the model anything spurious: identical completions still get
+    identical jitter, so the advantage only becomes non-zero when the
+    completions genuinely differ.
+    """
+    if magnitude <= 0:
+        return [0.0] * len(texts)
+    out: list[float] = []
+    for t in texts:
+        h = hashlib.md5(t.encode("utf-8", "replace")).digest()
+        val = int.from_bytes(h[:8], "big") / float(1 << 64)
+        out.append((val - 0.5) * 2.0 * magnitude)
+    return out
 
 
 def _default_scenario_path() -> Path:
@@ -113,6 +159,7 @@ def ghostexec_env_step_reward(
     """
     perturb = os.environ.get("GHOSTEXEC_PERTURB", "0").strip() not in ("", "0", "false", "False")
     rewards: list[float] = []
+    texts: list[str] = []
     for i, completion in enumerate(completions):
         rng = random.Random(1_000_003 * (i + 1))
         scen = _pick_scenario_for_call(rng)
@@ -126,12 +173,30 @@ def ghostexec_env_step_reward(
         try:
             act = parse_completion_to_action(completion) or GhostexecAction(action_type="do_nothing")
             rewards.append(_episode_reward(scen, act, rng))
+            texts.append(completion_to_str(completion))
         finally:
             if cleanup is not None:
                 try:
                     cleanup.unlink(missing_ok=True)
                 except Exception:
                     pass
+
+    # PAR-style bounded squash: keeps rewards in (-1, 1), preserves ordering.
+    if _env_bool("GHOSTEXEC_REWARD_SQUASH", True):
+        scale = _env_float("GHOSTEXEC_REWARD_SQUASH_SCALE", 2.0)
+        rewards = [_bounded_squash(r, scale) for r in rewards]
+
+    # Anti dead-signal jitter: only kicks in when the group actually collapses
+    # to (near) zero variance. Preserves learning on genuinely diverse groups.
+    if _env_bool("GHOSTEXEC_REWARD_JITTER", True) and len(rewards) >= 2:
+        try:
+            sigma = statistics.pstdev(rewards)
+        except statistics.StatisticsError:
+            sigma = 0.0
+        if sigma < 1e-6:
+            magnitude = _env_float("GHOSTEXEC_REWARD_JITTER_MAG", 1e-3)
+            rewards = [r + j for r, j in zip(rewards, _tie_break_jitter(texts, magnitude))]
+
     return rewards
 
 
