@@ -62,12 +62,31 @@ def require_cuda_for_unsloth() -> None:
 
     if torch.cuda.is_available():
         return
+    _cuda_built = getattr(torch.version, "cuda", None)
+    _cvd_repr = repr(os.environ["CUDA_VISIBLE_DEVICES"]) if "CUDA_VISIBLE_DEVICES" in os.environ else "(not set)"
+    _cpu_only = _cuda_built is None
+    _hints = []
+    if os.environ.get("CUDA_VISIBLE_DEVICES", None) == "":
+        _hints.append(
+            "CUDA_VISIBLE_DEVICES is set to an empty string (hides all GPUs). "
+            "Run the first notebook cell that clears it, then **Kernel → Restart** "
+            "so torch loads after the fix."
+        )
+    if _cpu_only:
+        _hints.append(
+            "torch.version.cuda is None → this PyTorch build is **CPU-only**. "
+            "Install CUDA PyTorch in the same conda env, then restart the kernel, e.g.: "
+            "`conda install -y pytorch pytorch-cuda=12.4 -c pytorch -c nvidia` "
+            "(12.4 wheels work with newer drivers such as 12.8; see pytorch.org/get-started/locally)."
+        )
+    else:
+        _hints.append(
+            "Driver may see a GPU (`nvidia-smi`) while this torch build does not — "
+            "reinstall matching CUDA torch from pytorch.org / conda nvidia channel."
+        )
     raise RuntimeError(
         "Unsloth requires a CUDA GPU: torch.cuda.is_available() is False. "
-        f"torch={torch.__version__!s} cuda={getattr(torch.version, 'cuda', None)!s} "
-        f"CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES', '')!r}. "
-        "Fix: use a GPU notebook or SageMaker instance (e.g. ml.g5.*); run `nvidia-smi` in a terminal. "
-        "If the driver sees a GPU but PyTorch does not, reinstall CUDA-enabled torch in this env "
-        "(see https://pytorch.org/get-started/locally/ — e.g. "
-        "`conda install pytorch pytorch-cuda=12.4 -c pytorch -c nvidia` matching your driver)."
+        f"torch={torch.__version__!s} torch.version.cuda={_cuda_built!r} "
+        f"CUDA_VISIBLE_DEVICES={_cvd_repr}. "
+        + " ".join(_hints)
     )
