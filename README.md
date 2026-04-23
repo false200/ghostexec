@@ -29,7 +29,7 @@ tags:
 | Item | Status |
 |------|--------|
 | OpenEnv-based env + `openenv.yaml` | Done in-repo (`openenv-core[core]>=0.2.3` in `pyproject.toml`; aligns with current PyPI release line). |
-| Training notebook (Unsloth + TRL GRPO) | `training/ghostexec_unsloth_grpo_colab.ipynb` — installs pinned `transformers` / `trl`, Hub caps, `bitsandbytes` / `xformers`, `lm-format-enforcer`; GRPO calls into `GhostexecEnvironment`; before/after eval + plots. |
+| Training notebook (Unsloth + TRL GRPO) | `training/ghostexec_unsloth_grpo_colab.ipynb` — installs pinned `transformers` / `trl`, Hub caps, `bitsandbytes`, optional wheel-only `xformers`, `lm-format-enforcer`; GRPO calls into `GhostexecEnvironment`; before/after eval + plots. |
 | Evidence of a real run (loss/reward plots) | **You:** run notebook → copy key PNGs into `docs/submission_results/` (see that folder) and **embed or link** them from this README. Do not rely only on gitignored `outputs/`. |
 | Short write-up or &lt;2 min video | **You:** publish HF post or YouTube, then add the **URL here** (placeholder: replace `YOUR_HF_BLOG_URL`, `YOUR_YOUTUBE_URL`). |
 | Public HF Space URL | **You:** `openenv push` → add **one line** near the top of this README: `**Live Space:** https://huggingface.co/spaces/<org>/<name>` |
