@@ -137,3 +137,12 @@ def test_env_step_reward_jitter_off_leaves_ties(monkeypatch: pytest.MonkeyPatch)
     distinct = ["not json at all", "also not json", "still not parseable"]
     out = ghostexec_env_step_reward([""], distinct)
     assert len(set(out)) == 1
+
+
+def test_env_step_reward_extreme_ksteps_env_finishes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Participant Help Guide §5–6: absurd GHOSTEXEC_REWARD_KSTEPS must not hang reward."""
+    monkeypatch.setenv("GHOSTEXEC_REWARD_KSTEPS", "999999")
+    monkeypatch.delenv("GHOSTEXEC_GRPO_SCENARIO", raising=False)
+    out = ghostexec_env_step_reward([""], [REPLY_VIP_CRIT_E01])
+    assert len(out) == 1
+    assert isinstance(out[0], float)

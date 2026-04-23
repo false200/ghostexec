@@ -74,6 +74,25 @@ def test_multiturn_reward_gracefully_handles_broken_generation() -> None:
     assert isinstance(rewards[0], float)
 
 
+def test_multiturn_num_turns_clamped_to_sane_max() -> None:
+    """Participant Help Guide §5–6: extreme num_turns cannot spawn unbounded follow-ups."""
+    call_count = {"n": 0}
+
+    def fake_generate(prompt: str) -> str:
+        call_count["n"] += 1
+        return DO_NOTHING
+
+    reward_fn = make_multiturn_reward(
+        model=object(),
+        tokenizer=_FakeTokenizer(),
+        num_turns=10_000,
+        gamma=0.9,
+        generate_fn=fake_generate,
+    )
+    reward_fn([""], [REPLY_VIP_CRIT_E01])
+    assert call_count["n"] <= 31
+
+
 def test_single_turn_matches_first_step_scale() -> None:
     """num_turns=1 should behave like a plain first-step reward."""
 

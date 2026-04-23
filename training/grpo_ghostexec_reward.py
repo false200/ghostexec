@@ -39,6 +39,11 @@ except ImportError:
     from server.ghostexec_environment import GhostexecEnvironment
 
 
+# Hard cap on scripted k-step lookahead inside one reward call (Participant Help
+# Guide §5–6: avoid infinite / runaway loops if env vars are mistyped).
+_MAX_REWARD_K_STEPS = 64
+
+
 def _env_int(name: str, default: int) -> int:
     try:
         return int(os.environ.get(name, str(default)).strip() or default)
@@ -122,7 +127,7 @@ def _load_world_data(path: Path) -> dict[str, Any]:
 
 
 def _episode_reward(scen: Path, act: GhostexecAction, rng: random.Random) -> float:
-    k_steps = _env_int("GHOSTEXEC_REWARD_KSTEPS", 0)
+    k_steps = max(0, min(_env_int("GHOSTEXEC_REWARD_KSTEPS", 0), _MAX_REWARD_K_STEPS))
     gamma = _env_float("GHOSTEXEC_REWARD_GAMMA", 0.9)
     env = GhostexecEnvironment(scen)
     env.reset()
@@ -154,7 +159,8 @@ def ghostexec_env_step_reward(
     - ``GHOSTEXEC_GRPO_SCENARIO``: hard-pin a scenario path (back-compat default).
     - ``GHOSTEXEC_CURRICULUM``: rotate over ``easy|mid|hard|all`` scenarios.
     - ``GHOSTEXEC_PERTURB=1``: shuffle list order / sim-time inside the chosen scenario.
-    - ``GHOSTEXEC_REWARD_KSTEPS``: extend each rollout with N scripted follow-ups.
+    - ``GHOSTEXEC_REWARD_KSTEPS``: extend each rollout with N scripted follow-ups
+      (hard-capped at 64 per call to prevent runaway compute on mis-set env vars).
     - ``GHOSTEXEC_REWARD_GAMMA``: discount for those follow-ups.
     """
     perturb = os.environ.get("GHOSTEXEC_PERTURB", "0").strip() not in ("", "0", "false", "False")

@@ -20,6 +20,22 @@ tags:
 
 ---
 
+## OpenEnv Hackathon alignment (themes + submission checklist)
+
+**Theme fit (examples, not exhaustive):** Ghostexec targets **Theme 3.2 — Personalized tasks** (executive-style inbox, calendar, conflicts, delegation via structured actions) and supports **Theme 2 — Long-horizon planning** through multi-step scoring (`GHOSTEXEC_REWARD_KSTEPS`, `GHOSTEXEC_MULTITURN=1`, `training/multiturn_reward.py`, `training/openenv_grpo_rollout.py`). **Theme 4** is partially supported via curriculum + perturb (`GHOSTEXEC_CURRICULUM`, `GHOSTEXEC_PERTURB`) and diverse scenarios under `scenarios/`.
+
+**Minimum submission checklist (fill before freeze):**
+
+| Item | Status |
+|------|--------|
+| OpenEnv-based env + `openenv.yaml` | Done in-repo (`openenv-core[core]>=0.2.3` in `pyproject.toml`; aligns with current PyPI release line). |
+| Training notebook (Unsloth + TRL GRPO) | `training/ghostexec_unsloth_grpo_colab.ipynb` — installs pinned `transformers` / `trl`, Hub caps, `bitsandbytes` / `xformers`, `lm-format-enforcer`; GRPO calls into `GhostexecEnvironment`; before/after eval + plots. |
+| Evidence of a real run (loss/reward plots) | **You:** run notebook → copy key PNGs into `docs/submission_results/` (see that folder) and **embed or link** them from this README. Do not rely only on gitignored `outputs/`. |
+| Short write-up or &lt;2 min video | **You:** publish HF post or YouTube, then add the **URL here** (placeholder: replace `YOUR_HF_BLOG_URL`, `YOUR_YOUTUBE_URL`). |
+| Public HF Space URL | **You:** `openenv push` → add **one line** near the top of this README: `**Live Space:** https://huggingface.co/spaces/<org>/<name>` |
+
+---
+
 ## Features
 
 - **Legal action set** — `reply_email`, `archive_email`, `reschedule_meeting`, `cancel_meeting`, `complete_task`, `delegate_task`, `send_message`, `do_nothing` (see `models.py`).
@@ -109,6 +125,8 @@ Phase-4 scoring (`server/reward.py`) combines three channels with **fixed weight
 
 Then applies output scaling, invalid-step adjustments, bonuses/penalties, and a floor for `do_nothing`. Full component values are available on `RewardBreakdown` and are mirrored into observation metadata where configured. **Episode reward traces** append to `outputs/logs/episode_rewards.jsonl` (directory gitignored).
 
+**Reward-engineering provenance.** The design follows the reward-shaping playbook surveyed in *Comprehensive Overview of Reward Engineering and Shaping in Advancing Reinforcement Learning Applications* ([arXiv:2408.10215](https://arxiv.org/abs/2408.10215)): dense per-step shaping around proxy signals (conflict / relationship / task) instead of a single sparse end-of-episode reward, fixed weights to keep channel trade-offs inspectable, and bounded per-step magnitudes to resist hacking. The training-side add-ons in `training/grpo_ghostexec_reward.py` (format-valid, id-relevance, group-diversity, VIP-critical reply bonus, tanh-squash + jitter) implement the proxy-reward / anti-hacking patterns catalogued in *Reward Engineering for Reinforcement Learning in Software Tasks* ([arXiv:2601.19100](https://arxiv.org/abs/2601.19100)) — particularly structure-valid checks, semantic-relevance checks, and bounded + tie-broken aggregates. Both papers are cited in full in [Resources & references](#resources--references).
+
 ---
 
 ## HTTP vs WebSocket (episode state)
@@ -172,10 +190,13 @@ uv run pytest tests/test_complete_integration.py::test_ghostexec_env_client_agai
 
 ## Hugging Face Spaces
 
-Deploy with the OpenEnv CLI from this directory:
+Full OpenEnv CLI flow from this directory (matches steps 5–8 of the [Packaging & Deploying guide](https://meta-pytorch.org/OpenEnv/auto_getting_started/environment-builder.html)):
 
 ```bash
-openenv push
+openenv serve                       # local dev server on :8000
+openenv build                       # build the Docker image
+openenv validate --verbose          # structure + Dockerfile + entrypoint checks
+openenv push                        # deploy to HF Spaces
 # openenv push --repo-id your-username/ghostexec
 ```
 
@@ -226,6 +247,9 @@ Environment variables (set before running the GRPO cell):
 | `GHOSTEXEC_PERTURB=1` | Shuffle list order (+ optional time shift) per call. |
 | `GHOSTEXEC_REWARD_KSTEPS` | k scripted follow-up steps (`smart_action`) to score long-term consequences. |
 | `GHOSTEXEC_REWARD_GAMMA` | Discount for those follow-up steps (default 0.9). |
+| `GHOSTEXEC_MULTITURN=1` | Swap the core reward channel for a k-turn **process-aware** rollout (see "Process supervision visibility"). |
+| `GHOSTEXEC_MULTITURN_TURNS`, `GHOSTEXEC_MULTITURN_GAMMA` | Turns + discount for the multi-turn reward (defaults 3, 0.9). |
+| `GHOSTEXEC_SAVE_MERGED=1` | After training, also write a merged 16-bit checkpoint via Unsloth's `save_pretrained_merged(..., save_method="merged_16bit")` alongside the default adapter-only save. |
 
 **Rejection-sampled SFT** (`training/rejection_sft.py`): generate `(briefing, smart_action JSON)` pairs across scenarios, filter to the top quantile by env reward, feed that into `SFTTrainer`. Faster convergence than raw demos.
 
@@ -235,16 +259,25 @@ Environment variables (set before running the GRPO cell):
 
 **Multi-turn reward** (`training/multiturn_reward.py`): `make_multiturn_reward(model, tokenizer, num_turns=3, gamma=0.9)` returns a TRL-compatible reward function that rolls out an entire episode for each GRPO sample: the completion is turn 1, then the model itself generates k-1 follow-up JSON actions, each stepping the env. Reward is the discounted sum. Credits "first actions that enable good follow-ups" instead of one-shot tricks. Toggle via `GHOSTEXEC_MULTITURN=1` (with `GHOSTEXEC_MULTITURN_TURNS`, `GHOSTEXEC_MULTITURN_GAMMA`). For the full OpenEnv `rollout_func` path, `training/openenv_grpo_rollout.py::rollout_multiturn_ghostexec` runs the same pattern through `generate_rollout_completions` when `GHOSTEXEC_ROLLOUT_TURNS>1`.
 
+**Process supervision visibility.** When `GHOSTEXEC_MULTITURN=1`, each GRPO sample is scored by a k-turn rollout instead of a one-shot env step, and the GRPO config cell prints `PROCESS SUPERVISION: ON` plus the turn count and gamma. The plot cell then prints a dedicated `process_reward_mean: ...` line (also saved to `outputs/logs/process_reward_summary.json`) and the `ghostexec_multiturn_reward` channel appears in `outputs/plots/grpo_reward_channels.png` — so a reviewer can tell at a glance whether the run used process-aware rewards or final-only rewards.
+
 **Observable evidence of training progress.** The Colab notebook produces a self-contained artifact bundle under `outputs/` so reviewers can see that GRPO actually moved the policy:
 
 | Artifact | What it shows |
 |----------|---------------|
 | `outputs/plots/grpo_reward_curve.png` | Mean reward over GRPO log steps. |
-| `outputs/plots/grpo_reward_channels.png` | Per-channel reward (env step / format / diversity / id-relevance / VIP-critical) — detects hacking. |
+| `outputs/plots/grpo_reward_channels.png` | Per-channel reward (env step / format / diversity / id-relevance / VIP-critical / multi-turn) — detects hacking, surfaces process rewards. |
+| `outputs/plots/grpo_diagnostics.png` | 2x2 diagnostics: mean reward + EMA, within-group reward std, mean completion length, per-channel curves. |
+| `outputs/plots/before_after_eval.png` | **Judge-facing BEFORE vs AFTER bar chart**: `mean_return`, `format_valid`, `vip_critical_reply`, `conflicts_resolved` on the same held-out scenarios. |
+| `outputs/plots/before_after_channels.png` | BEFORE vs AFTER per-channel reward means (conflict / relationship / task). |
 | `outputs/eval/llm_before.json`, `outputs/eval/llm_after.json` | Same-schema held-out eval on `vip_meltdown.json` before and after training. |
 | `outputs/eval/scripted_baseline.json` | Reference baseline from the hand-written `smart_action` policy. |
 | `outputs/eval/before_sample.txt`, `outputs/eval/after_sample.txt` | Model's action on a fixed `phase2_core.json` briefing, before vs after. |
 | `outputs/eval/before_after.csv` | 7-row delta table: `mean_return`, `format_valid_rate`, `vip_critical_first_reply_rate`, `conflicts_resolved_rate`, and per-channel means. |
+| `outputs/logs/process_reward_summary.json` | `process_reward_mean` / last / step count for the multi-turn reward channel (when `GHOSTEXEC_MULTITURN=1`). |
+| `outputs/training/grpo_adapter/` | LoRA adapter + tokenizer saved via `model.save_pretrained(...)` (correct path for 4-bit Unsloth base). |
+| `outputs/training/grpo_merged_16bit/` | Optional merged 16-bit checkpoint from `model.save_pretrained_merged(..., save_method="merged_16bit")` (set `GHOSTEXEC_SAVE_MERGED=1`). |
+| `outputs/training/save_report.json` | Adapter / merged / smoke-inference status for the saved policy. |
 
 Everything is produced by **Run All** on the notebook once `GHOSTEXEC_CONSTRAIN_JSON=1` (+ `pip install lm-format-enforcer`) and a sensible `GHOSTEXEC_GRPO_MAX_STEPS` are set **before the GRPO cell** (knobs cell or any earlier cell — GRPO re-reads env).
 
@@ -290,6 +323,40 @@ ghostexec/
     ├── reward.py
     └── Dockerfile
 ```
+
+---
+
+## Resources & references
+
+Ghostexec is built against the official Meta PyTorch OpenEnv stack. Every design choice below is traceable to one of these sources.
+
+**OpenEnv core.** The Gymnasium-style `reset()` / `step()` / `state` interface in `server/ghostexec_environment.py`, the `EnvClient` subclass in `client.py`, and the `create_app(...)` wiring in `server/app.py` follow the [Packaging & Deploying guide](https://meta-pytorch.org/OpenEnv/auto_getting_started/environment-builder.html) exactly.
+
+- Core repo: [meta-pytorch/OpenEnv](https://github.com/meta-pytorch/OpenEnv)
+- Docs: [meta-pytorch.org/OpenEnv](https://meta-pytorch.org/OpenEnv/)
+
+**OpenEnv Hub (Hugging Face).** Target deployment for `openenv push`. The Space metadata at the top of this README + `openenv.yaml` are the knobs HF Spaces reads.
+
+- Environments: [huggingface.co/openenv](https://huggingface.co/openenv)
+- Spaces: [huggingface.co/openenv/spaces](https://huggingface.co/openenv/spaces)
+
+**Tutorials.** The GRPO training path in `training/openenv_grpo_rollout.py` (`rollout_func`, `generate_rollout_completions`, split `reward_funcs`) is the pattern from the [OpenEnv 04-training — Wordle GRPO tutorial](https://github.com/meta-pytorch/OpenEnv/blob/main/tutorial/04-training.md). The simpler scalar-reward path in `training/ghostexec_unsloth_grpo_colab.ipynb` mirrors the [OpenEnv 2048 GRPO Colab](https://colab.research.google.com/github/unslothai/notebooks/blob/main/nb/OpenEnv_gpt_oss_(20B)_Reinforcement_Learning_2048_Game.ipynb).
+
+- All tutorials: [OpenEnv/tutorial](https://github.com/meta-pytorch/OpenEnv/tree/main/tutorial)
+- Training examples: [OpenEnv/tutorial/examples](https://github.com/meta-pytorch/OpenEnv/tree/main/tutorial/examples)
+- Environment examples: [OpenEnv/envs](https://github.com/meta-pytorch/OpenEnv/tree/main/envs)
+
+**YouTube — Building RL environments.** Talks from Meta / OpenEnv contributors that informed the scenario-driven reset, WebSocket session model, and reward breakdown used here:
+
+- [Building RL Environments with OpenEnv](https://www.youtube.com/watch?v=0airz7BhBiA)
+- [OpenEnv Deep Dive](https://www.youtube.com/watch?v=ap4q4sAK4OY)
+- [Agentic RL Environments](https://www.youtube.com/watch?v=Jew4lhAiqnw)
+- [OpenEnv Livestream (4-hour walkthrough)](https://www.youtube.com/live/kkCNMz0Ptd8)
+
+**Reward-engineering papers.** See [Reward](#reward) for how each paper maps to specific components of `server/reward.py` and `training/grpo_ghostexec_reward.py`.
+
+- Jnadi, A. (2024). *Comprehensive Overview of Reward Engineering and Shaping in Advancing Reinforcement Learning Applications*. [arXiv:2408.10215](https://arxiv.org/abs/2408.10215). Informs the dense per-step conflict / relationship / task shaping and the bounded-magnitude design.
+- Masud, M.R., Wasi, A.T., Rahman, S., Parvez, M.R. (2026). *Reward Engineering for Reinforcement Learning in Software Tasks*. [arXiv:2601.19100](https://arxiv.org/abs/2601.19100). Informs the training-side proxy channels (`reward_format_valid`, `reward_group_diversity`, `reward_id_relevance`, `reward_vip_critical_reply_bonus`) and the tanh-squash + tie-break anti-hacking aggregate.
 
 ---
 

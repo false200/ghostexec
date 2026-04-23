@@ -147,6 +147,12 @@ def make_multiturn_reward(
         ``reward_fn(prompts, completions, **kwargs) -> list[float]``, usable
         directly inside ``GRPOConfig.reward_funcs``.
     """
+    # Participant Help Guide §5–6 / §12: hard bounds so reward rollouts cannot
+    # exhaust GPU time or tokens if callers pass extreme hyperparameters.
+    num_turns = max(1, min(int(num_turns), 32))
+    max_new_tokens = max(8, min(int(max_new_tokens), 512))
+    gamma = max(0.0, min(float(gamma), 1.0))
+
     # Lazy import of the default system prompt keeps this module import-light.
     from .openenv_grpo_rollout import GHOSTEXEC_SYSTEM_PROMPT
 
