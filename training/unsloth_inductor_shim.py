@@ -6,6 +6,11 @@ so ``from unsloth import ...`` does not crash.
 
 Call :func:`apply_unsloth_torch_inductor_shim` once per process before importing
 ``unsloth`` / ``unsloth_zoo``.
+
+Call :func:`require_cuda_for_unsloth` immediately after the shim and before
+``from unsloth import ...``. ``unsloth_zoo`` hard-requires a torch accelerator
+(``torch.cuda.is_available()`` on NVIDIA); CPU-only PyTorch raises a confusing
+``NotImplementedError`` otherwise.
 """
 
 from __future__ import annotations
@@ -49,3 +54,20 @@ def apply_unsloth_torch_inductor_shim() -> None:
     mod.__package__ = "torch._inductor"
     sys.modules.setdefault("torch._inductor.config", mod)
     ind.config = mod
+
+
+def require_cuda_for_unsloth() -> None:
+    """Raise with actionable text if PyTorch cannot see an NVIDIA-style GPU."""
+    import torch
+
+    if torch.cuda.is_available():
+        return
+    raise RuntimeError(
+        "Unsloth requires a CUDA GPU: torch.cuda.is_available() is False. "
+        f"torch={torch.__version__!s} cuda={getattr(torch.version, 'cuda', None)!s} "
+        f"CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES', '')!r}. "
+        "Fix: use a GPU notebook or SageMaker instance (e.g. ml.g5.*); run `nvidia-smi` in a terminal. "
+        "If the driver sees a GPU but PyTorch does not, reinstall CUDA-enabled torch in this env "
+        "(see https://pytorch.org/get-started/locally/ — e.g. "
+        "`conda install pytorch pytorch-cuda=12.4 -c pytorch -c nvidia` matching your driver)."
+    )
