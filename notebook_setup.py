@@ -14,10 +14,13 @@ from pathlib import Path
 
 def candidate_directories() -> list[Path]:
     out: list[Path] = []
+    home = Path.home()
     bases = [
         Path.cwd(),
         Path.cwd() / "ghostexec",
         Path("/content/ghostexec"),
+        home / "SageMaker" / "ghostexec",
+        home / "SageMaker",
         Path("/kaggle/working/ghostexec"),
         Path("/kaggle/working"),
     ]
@@ -55,6 +58,26 @@ def ensure_ghostexec_on_path(*, pip_install: bool = True) -> Path:
     if rs not in sys.path:
         sys.path.insert(0, rs)
     if pip_install:
+        # SageMaker AMIs may ship GCC too old to *compile* NumPy 2.4+; pre-install a wheel.
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-qqq", "-U", "pip", "setuptools", "wheel"],
+            cwd=rs,
+            check=True,
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "-qqq",
+                "numpy>=1.26,<2.3",
+                "--only-binary",
+                "numpy",
+            ],
+            cwd=rs,
+            check=True,
+        )
         subprocess.run(
             [sys.executable, "-m", "pip", "install", "-q", "-e", "."],
             cwd=rs,
