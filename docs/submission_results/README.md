@@ -2,7 +2,20 @@
 
 Judges and the README expect **committed** evidence of training, not only files under gitignored `outputs/`.
 
-After a successful `training/ghostexec_unsloth_grpo_colab.ipynb` run, copy (or export) these into this folder and link them from the root `README.md`:
+After a successful `training/ghostexec_unsloth_grpo_colab.ipynb` run, run:
+
+```bash
+uv run python scripts/export_submission_plots.py
+```
+
+This exports committable gatekeeper plots into this folder:
+
+| Suggested filename | Source |
+|--------------------|--------|
+| `reward_curve.png` | `outputs/logs/episode_rewards.jsonl` |
+| `loss_curve.png` | `outputs/training/**/trainer_state.json` |
+
+You can also copy these optional diagnostics from `outputs/plots/` and link them from the root `README.md`:
 
 | Suggested filename | Source (from a full notebook run) |
 |--------------------|-----------------------------------|

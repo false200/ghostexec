@@ -20,6 +20,19 @@ tags:
 
 ---
 
+## Deliverables
+
+| Deliverable | URL |
+|-------------|-----|
+| Public HF Space (required) | `TODO: https://huggingface.co/spaces/<org>/ghostexec` |
+| Training notebook (Colab) | `https://colab.research.google.com/github/false200/ghostexec/blob/main/training/ghostexec_unsloth_grpo_colab.ipynb` |
+| Write-up / blog (HF post preferred) | `TODO: https://huggingface.co/blog/...` |
+| Short demo video (&lt;2 min) | `TODO: https://youtube.com/...` |
+
+Fill these URLs before submission freeze so reviewers can verify everything from one place.
+
+---
+
 ## OpenEnv Hackathon alignment (themes + submission checklist)
 
 **Theme fit (examples, not exhaustive):** Ghostexec targets **Theme 3.2 — Personalized tasks** (executive-style inbox, calendar, conflicts, delegation via structured actions) and supports **Theme 2 — Long-horizon planning** through multi-step scoring (`GHOSTEXEC_REWARD_KSTEPS`, `GHOSTEXEC_MULTITURN=1`, `training/multiturn_reward.py`, `training/openenv_grpo_rollout.py`). **Theme 4** is partially supported via curriculum + perturb (`GHOSTEXEC_CURRICULUM`, `GHOSTEXEC_PERTURB`) and diverse scenarios under `scenarios/`.
@@ -31,8 +44,21 @@ tags:
 | OpenEnv-based env + `openenv.yaml` | Done in-repo (`openenv-core[core]>=0.2.3` in `pyproject.toml`; aligns with current PyPI release line). |
 | Training notebook (Unsloth + TRL GRPO) | `training/ghostexec_unsloth_grpo_colab.ipynb` — installs pinned `transformers` / `trl`, Hub caps, `bitsandbytes`, `lm-format-enforcer` (does **not** pip-install `torch` / `xformers`; bring your own CUDA stack); GRPO calls into `GhostexecEnvironment`; before/after eval + plots. |
 | Evidence of a real run (loss/reward plots) | **You:** run notebook → copy key PNGs into `docs/submission_results/` (see that folder) and **embed or link** them from this README. Do not rely only on gitignored `outputs/`. |
-| Short write-up or &lt;2 min video | **You:** publish HF post or YouTube, then add the **URL here** (placeholder: replace `YOUR_HF_BLOG_URL`, `YOUR_YOUTUBE_URL`). |
-| Public HF Space URL | **You:** `openenv push` → add **one line** near the top of this README: `**Live Space:** https://huggingface.co/spaces/<org>/<name>` |
+| Short write-up or &lt;2 min video | **You:** publish and paste links in [Deliverables](#deliverables). |
+| Public HF Space URL | **You:** `openenv push` and paste the URL in [Deliverables](#deliverables). |
+
+---
+
+## Design narrative
+
+Ghostexec is intentionally built as an **AI Chief of Staff** environment, not a grid-world clone: the model must triage inbox, calendar, stakeholder mood, and task deadlines under conflict pressure while taking only legal structured actions.
+
+- **Environment Innovation (40%)** — scenario-driven executive operations with competing priorities, conflict queues, and relationship-sensitive outcomes in `scenarios/*.json` + `server/ghostexec_environment.py`.
+- **Storytelling & Presentation (30%)** — each scenario encodes a narrative arc (VIP escalations, family/professional collisions, deadline cascades) so policy behavior reads like realistic assistant decisions rather than abstract moves.
+- **Showing Improvement in Rewards (20%)** — notebook exports held-out BEFORE vs AFTER vs RANDOM metrics (`outputs/eval/before_after.csv`) and visual deltas (`outputs/plots/before_after_eval.png`, `before_after_channels.png`).
+- **Reward & Training Pipeline (10%)** — fixed weighted core signal (0.35 conflict / 0.35 relationship / 0.30 task) plus anti-hacking GRPO channels (`training/grpo_ghostexec_reward.py`) and optional multi-turn process supervision (`training/multiturn_reward.py`).
+
+This framing gives judges a clear throughline: **realistic executive chaos -> constrained legal actions -> measurable policy improvement on held-out scenarios**.
 
 ---
 
@@ -163,6 +189,12 @@ uv run python scripts/http_endpoint_smoke.py --print-curl
 uv run pytest tests/ -q
 ```
 
+Opt-in Docker build smoke (Phase 1 gate):
+
+```bash
+GHOSTEXEC_RUN_DOCKER_BUILD=1 uv run pytest tests/test_docker_build.py -q
+```
+
 With the server already on port 8000:
 
 ```bash
@@ -271,9 +303,10 @@ Environment variables (set before running the GRPO cell):
 | `outputs/plots/before_after_eval.png` | **Judge-facing BEFORE vs AFTER bar chart**: `mean_return`, `format_valid`, `vip_critical_reply`, `conflicts_resolved` on the same held-out scenarios. |
 | `outputs/plots/before_after_channels.png` | BEFORE vs AFTER per-channel reward means (conflict / relationship / task). |
 | `outputs/eval/llm_before.json`, `outputs/eval/llm_after.json` | Same-schema held-out eval on `vip_meltdown.json` before and after training. |
+| `outputs/eval/random_baseline.json` | Random legal-action baseline on the same held-out scenarios (judge-facing floor). |
 | `outputs/eval/scripted_baseline.json` | Reference baseline from the hand-written `smart_action` policy. |
 | `outputs/eval/before_sample.txt`, `outputs/eval/after_sample.txt` | Model's action on a fixed `phase2_core.json` briefing, before vs after. |
-| `outputs/eval/before_after.csv` | 7-row delta table: `mean_return`, `format_valid_rate`, `vip_critical_first_reply_rate`, `conflicts_resolved_rate`, and per-channel means. |
+| `outputs/eval/before_after.csv` | Metric table with `before`, `after`, and `random` columns plus deltas (`after-before`, `after-random`). |
 | `outputs/logs/process_reward_summary.json` | `process_reward_mean` / last / step count for the multi-turn reward channel (when `GHOSTEXEC_MULTITURN=1`). |
 | `outputs/training/grpo_adapter/` | LoRA adapter + tokenizer saved via `model.save_pretrained(...)` (correct path for 4-bit Unsloth base). |
 | `outputs/training/grpo_merged_16bit/` | Optional merged 16-bit checkpoint from `model.save_pretrained_merged(..., save_method="merged_16bit")` (set `GHOSTEXEC_SAVE_MERGED=1`). |
