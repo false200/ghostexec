@@ -8,7 +8,12 @@
 
 from typing import Any, Dict
 
-from openenv.core import EnvClient
+try:
+    # OpenEnv newer layout.
+    from openenv.client import EnvClient
+except ImportError:
+    # Backward compatibility with older OpenEnv versions.
+    from openenv.core import EnvClient
 from openenv.core.client_types import StepResult
 from openenv.core.env_server.types import State
 
