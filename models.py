@@ -10,8 +10,30 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from openenv.core.env_server.types import Action, Observation
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+try:
+    from openenv.core.env_server.types import Action as _OpenEnvAction
+    from openenv.core.env_server.types import Observation as _OpenEnvObservation
+except Exception:
+    _OpenEnvAction = BaseModel  # type: ignore[assignment]
+    _OpenEnvObservation = BaseModel  # type: ignore[assignment]
+
+
+def _is_pydantic_model_class(cls: object) -> bool:
+    try:
+        return isinstance(cls, type) and issubclass(cls, BaseModel)
+    except TypeError:
+        return False
+
+
+# Some OpenEnv builds expose dataclass-style Action/Observation that do not accept
+# additional keyword fields, which breaks GhostexecAction/GhostexecObservation
+# construction in Colab. Fall back to BaseModel in that case.
+ActionBase = _OpenEnvAction if _is_pydantic_model_class(_OpenEnvAction) else BaseModel
+ObservationBase = (
+    _OpenEnvObservation if _is_pydantic_model_class(_OpenEnvObservation) else BaseModel
+)
 
 # --- Aliases for scenario / world strings ---
 
@@ -118,7 +140,7 @@ class WorldState(BaseModel):
     tasks: list[Task] = Field(default_factory=list)
 
 
-class GhostexecAction(Action):
+class GhostexecAction(ActionBase):
     """
     Legal agent actions (Phase 3). Unknown HTTP payloads default to do_nothing
     so older clients do not crash deserialization.
@@ -145,7 +167,7 @@ class GhostexecAction(Action):
         return data
 
 
-class GhostexecObservation(Observation):
+class GhostexecObservation(ObservationBase):
     """
     Primary LLM-facing field is `echoed_message`: full plain-text briefing (Phase 3).
     """
