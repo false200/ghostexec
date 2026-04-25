@@ -44,6 +44,26 @@ def find_root() -> Path | None:
     return None
 
 
+def apply_grpo_training_defaults() -> None:
+    """Set recommended GRPO / reward env vars only when unset (Colab / local notebooks).
+
+    Call after ``ensure_ghostexec_on_path()`` so training cells pick up sane defaults:
+    multi-turn in-process rollouts, mild reward squash, tie-break jitter for zero-std groups.
+    """
+    defaults: dict[str, str] = {
+        "GHOSTEXEC_ROLLOUT_TURNS": "3",
+        "GHOSTEXEC_ROLLOUT_GAMMA": "0.9",
+        "GHOSTEXEC_REWARD_SQUASH": "1",
+        "GHOSTEXEC_REWARD_SQUASH_SCALE": "2.5",
+        "GHOSTEXEC_REWARD_JITTER": "1",
+        "GHOSTEXEC_REWARD_JITTER_MAG": "0.001",
+        "TRL_EXPERIMENTAL_SILENCE": "1",
+    }
+    for key, val in defaults.items():
+        if key not in os.environ or os.environ.get(key, "").strip() == "":
+            os.environ[key] = val
+
+
 def ensure_ghostexec_on_path(*, pip_install: bool = True) -> Path:
     """Return repo root. Idempotent: safe to call from every notebook section."""
     r = find_root()

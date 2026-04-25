@@ -249,11 +249,13 @@ def ghostexec_rollout_func(prompts: list[str], trainer: Any = None) -> dict[str,
     """
     TRL ``rollout_func`` entrypoint (same contract as OpenEnv Wordle tutorial).
 
-    Uses a single in-process :class:`GhostexecEnvironment` (scenario from
-    ``GHOSTEXEC_GRPO_SCENARIO`` or ``phase2_core.json``).
+    Uses a **fresh** in-process :class:`GhostexecEnvironment` per prompt in
+    ``prompts`` (scenario from ``GHOSTEXEC_GRPO_SCENARIO`` or ``phase2_core.json``)
+    so GRPO samples in one batch do not leak world state across completions.
 
-    Multi-turn mode: set ``GHOSTEXEC_ROLLOUT_TURNS`` (default ``1``) to run
+    Multi-turn mode: set ``GHOSTEXEC_ROLLOUT_TURNS`` (default ``3``) to run
     multiple model turns per episode via ``rollout_multiturn_ghostexec``.
+    Set ``GHOSTEXEC_ROLLOUT_TURNS=1`` for single-step-only rollouts.
     Discount controlled by ``GHOSTEXEC_ROLLOUT_GAMMA`` (default ``0.9``).
     """
     if trainer is None:
@@ -266,7 +268,6 @@ def ghostexec_rollout_func(prompts: list[str], trainer: Any = None) -> dict[str,
             stacklevel=2,
         )
 
-    env = GhostexecEnvironment(_scenario_path())
     tokenizer = getattr(trainer, "processing_class", None) or getattr(trainer, "tokenizer", None)
     if tokenizer is None:
         raise ValueError("Trainer must expose processing_class or tokenizer.")
@@ -279,15 +280,17 @@ def ghostexec_rollout_func(prompts: list[str], trainer: Any = None) -> dict[str,
     turns_run: list[float] = []
 
     try:
-        num_turns = max(1, int(os.environ.get("GHOSTEXEC_ROLLOUT_TURNS", "1")))
+        num_turns = max(1, int(os.environ.get("GHOSTEXEC_ROLLOUT_TURNS", "3")))
     except ValueError:
-        num_turns = 1
+        num_turns = 3
     try:
         gamma = float(os.environ.get("GHOSTEXEC_ROLLOUT_GAMMA", "0.9"))
     except ValueError:
         gamma = 0.9
 
     for prompt_text in prompts:
+        # Fresh env per sample so parallel GRPO completions never share mutated world.
+        env = GhostexecEnvironment(_scenario_path())
         if num_turns > 1:
             episode = rollout_multiturn_ghostexec(
                 trainer,

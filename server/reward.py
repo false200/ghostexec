@@ -5,8 +5,9 @@
 # LICENSE file in the root directory of this source tree.
 
 """
-Phase 4 reward: weighted (0.35 / 0.35 / 0.30) with conflict cap, critical-queue shaping,
-full sub-scores even on invalid steps (+ explicit invalid penalty), and mild output scaling.
+Phase 4 reward: weighted (0.35 / 0.35 / 0.30) with potential-style deltas, critical-queue
+shaping, full sub-scores even on invalid steps (+ explicit invalid penalty), and mild output
+scaling.
 """
 
 from __future__ import annotations
@@ -35,6 +36,17 @@ TONE_PENALTY_FORMAL_PERSONAL: float = 0.08
 
 _RESOLVE_MICRO_BONUS: float = 0.12
 _CRITICAL_PER_EMAIL_BONUS: float = 0.22
+_RESCHEDULE_VALID_MICRO_BONUS: float = 0.10
+_SEND_MESSAGE_VALID_MICRO_BONUS: float = 0.08
+_COMPLETE_TASK_VALID_MICRO_BONUS: float = 0.06
+_DELEGATE_TASK_VALID_MICRO_BONUS: float = 0.10
+_DO_NOTHING_STRICT_PENALTY: float = -0.15
+_REPLY_PRIORITY_MICRO_BONUS: dict[str, float] = {
+    "critical": 0.30,
+    "high": 0.15,
+    "normal": 0.04,
+    "low": 0.02,
+}
 
 _MOOD_RANK: dict[str, int] = {
     "happy": 4,
@@ -102,7 +114,13 @@ def _attendee_moods_ok(world: WorldState, pair: frozenset[str]) -> bool:
     return True
 
 
-def score_conflict_resolution(before: WorldState, after: WorldState) -> float:
+def score_conflict_resolution(
+    before: WorldState,
+    after: WorldState,
+    action: GhostexecAction,
+    *,
+    action_ok: bool,
+) -> float:
     b = _pair_set(meeting_conflicts(before))
     a = _pair_set(meeting_conflicts(after))
     s = 0.0
@@ -110,10 +128,10 @@ def score_conflict_resolution(before: WorldState, after: WorldState) -> float:
         s += 2.0 + _RESOLVE_MICRO_BONUS
         if _attendee_moods_ok(after, _p):
             s += 1.0
-    for _ in b & a:
-        s -= 1.0
     for _ in a - b:
         s -= 3.0
+    if action_ok and action.action_type == "reschedule_meeting":
+        s += _RESCHEDULE_VALID_MICRO_BONUS
     return s
 
 
@@ -144,6 +162,7 @@ def score_relationship(
     after: WorldState,
     action: GhostexecAction,
     *,
+    action_ok: bool,
     relationship_suppressed_for_email_to: frozenset[str] | None = None,
 ) -> float:
     rel_sup = relationship_suppressed_for_email_to or frozenset()
@@ -166,6 +185,12 @@ def score_relationship(
         if em and em.sender in rel_sup:
             return 0.0
         if em:
+            if action_ok and (action.message_body or "").strip():
+                pri = (em.priority or "").lower()
+                micro = _REPLY_PRIORITY_MICRO_BONUS.get(pri, 0.0)
+                if em.sender_relationship == "VIP":
+                    micro *= 2.0
+                s += micro
             tone = _classify_tone(action.message_body)
             contact = next((c for c in before.contacts if c.name == em.sender), None)
             if (
@@ -177,6 +202,10 @@ def score_relationship(
                 s -= TONE_PENALTY_CASUAL_ANGRY_BOARD
             if em.sender_relationship == "personal" and tone == "formal":
                 s -= TONE_PENALTY_FORMAL_PERSONAL
+    if action_ok and action.action_type == "send_message" and action.contact_name:
+        known_contact = any(c.name == action.contact_name for c in before.contacts)
+        if known_contact and (action.message_body or "").strip():
+            s += _SEND_MESSAGE_VALID_MICRO_BONUS
     return s
 
 
@@ -200,13 +229,6 @@ def score_task_completion(
 ) -> float:
     s = 0.0
     now = _parse_dt(after.simulation_time)
-    overdue_before = _overdue_tasks(before)
-
-    if action.action_type == "do_nothing" and overdue_before:
-        s -= 3.0
-    elif not action_ok and overdue_before:
-        # Illegal action while overdue work exists: same board pressure as idle (plus invalid add-on in aggregate).
-        s -= 3.0
 
     before_tasks = {t.id: t for t in before.tasks}
     after_tasks = {t.id: t for t in after.tasks}
@@ -226,6 +248,10 @@ def score_task_completion(
             de = next((c for c in after.contacts if c.name == ta.delegated_to), None)
             if de and de.importance <= 3:
                 s += 1.0
+    if action_ok and action.action_type == "complete_task":
+        s += _COMPLETE_TASK_VALID_MICRO_BONUS
+    if action_ok and action.action_type == "delegate_task":
+        s += _DELEGATE_TASK_VALID_MICRO_BONUS
     return s
 
 
@@ -281,11 +307,8 @@ def apply_do_nothing_penalty_floor(
 ) -> RewardBreakdown:
     if action.action_type != "do_nothing":
         return breakdown
-    floor_delta = 0.0
-    new_final = breakdown.final
-    if new_final > -0.12:
-        floor_delta = -0.12 - new_final
-        new_final = -0.12
+    floor_delta = _DO_NOTHING_STRICT_PENALTY
+    new_final = breakdown.final + floor_delta
     return breakdown.model_copy(
         update={"do_nothing_floor": floor_delta, "final": new_final},
     )
@@ -300,7 +323,7 @@ def compute_step_reward(
     episode_done: bool,
     relationship_suppressed_for_email_to: frozenset[str] | None = None,
 ) -> RewardBreakdown:
-    c_core = score_conflict_resolution(before, after)
+    c_core = score_conflict_resolution(before, after, action, action_ok=action_ok)
     crit_b = score_critical_queue_bonus(before, after)
     c_raw = c_core + crit_b
     c = max(-CONFLICT_RAW_CAP, min(CONFLICT_RAW_CAP, c_raw))
@@ -308,6 +331,7 @@ def compute_step_reward(
         before,
         after,
         action,
+        action_ok=action_ok,
         relationship_suppressed_for_email_to=relationship_suppressed_for_email_to,
     )
     t = score_task_completion(before, after, action, action_ok=action_ok)

@@ -189,7 +189,9 @@ def ghostexec_env_step_reward(
 
     # PAR-style bounded squash: keeps rewards in (-1, 1), preserves ordering.
     if _env_bool("GHOSTEXEC_REWARD_SQUASH", True):
-        scale = _env_float("GHOSTEXEC_REWARD_SQUASH_SCALE", 2.0)
+        # Slightly gentler default than 2.0: preserves ordering but avoids over-squashing
+        # small positive env returns after Phase-4 reward shaping (GRPO advantages).
+        scale = _env_float("GHOSTEXEC_REWARD_SQUASH_SCALE", 2.5)
         rewards = [_bounded_squash(r, scale) for r in rewards]
 
     # Anti dead-signal jitter: only kicks in when the group actually collapses

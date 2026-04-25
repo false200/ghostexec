@@ -62,7 +62,8 @@ def test_invalid_step_matches_do_nothing_subscores_plus_invalid_addon():
     bd_ok = reward_mod.compute_step_reward(w, w, noop, action_ok=True, episode_done=False)
     bd_bad = reward_mod.compute_step_reward(w, w, bad, action_ok=False, episode_done=False)
     assert bd_bad.invalid_step_adjustment == pytest.approx(-0.25)
-    assert bd_bad.final == pytest.approx(bd_ok.final - 0.25)
+    # do_nothing carries an additional strict additive floor (-0.15) not applied to invalid non-idle actions.
+    assert bd_bad.final == pytest.approx(bd_ok.final - (0.25 - 0.15))
 
 
 def test_scripted_episode_reward_direction_and_log(tmp_path, monkeypatch):

@@ -110,7 +110,8 @@ def test_invalid_actions_return_error_metadata_not_exception():
     assert obs.metadata.get("step_ok") is False
     assert obs.metadata.get("step_error")
     # Same before→after sub-scores as do_nothing, plus explicit invalid add-on.
-    assert obs.reward == pytest.approx((r_do_nothing or 0) - 0.25)
+    # do_nothing has an additional strict additive floor (-0.15), so the delta is -0.10 here.
+    assert obs.reward == pytest.approx((r_do_nothing or 0) - (0.25 - 0.15))
 
     obs2 = env.step(GhostexecAction(action_type="complete_task", task_id="t09"))
     assert obs2.metadata.get("step_ok") is False
