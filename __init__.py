@@ -6,11 +6,15 @@
 
 """Ghostexec Environment."""
 
-from .client import GhostexecEnv
 from .models import GhostexecAction, GhostexecObservation
 
-__all__ = [
-    "GhostexecAction",
-    "GhostexecObservation",
-    "GhostexecEnv",
-]
+# Importing ghostexec.models in notebooks should not require websocket client deps.
+# Keep client import optional so package imports survive OpenEnv layout differences.
+try:
+    from .client import GhostexecEnv
+except Exception:  # pragma: no cover - import-compat shim
+    GhostexecEnv = None  # type: ignore[assignment]
+
+__all__ = ["GhostexecAction", "GhostexecObservation"]
+if GhostexecEnv is not None:
+    __all__.append("GhostexecEnv")
