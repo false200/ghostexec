@@ -172,6 +172,12 @@ class GhostexecObservation(ObservationBase):
     Primary LLM-facing field is `echoed_message`: full plain-text briefing (Phase 3).
     """
 
+    # Keep these fields explicit for compatibility with OpenEnv builds where
+    # Observation is not a pydantic base carrying done/reward/metadata.
+    done: bool = False
+    reward: float | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
     echoed_message: str = Field(
         default="",
         description="Human-readable briefing text for the LLM (not JSON)",
