@@ -29,7 +29,7 @@ def test_expected_folder_structure():
     assert (ROOT / "pyproject.toml").is_file()
     assert (ROOT / "server" / "app.py").is_file()
     assert (ROOT / "server" / "ghostexec_environment.py").is_file()
-    assert (ROOT / "server" / "Dockerfile").is_file()
+    assert (ROOT / "Dockerfile").is_file() or (ROOT / "server" / "Dockerfile").is_file()
     assert (ROOT / "server" / "requirements.txt").is_file()
 
 

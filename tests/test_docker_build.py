@@ -17,6 +17,17 @@ ROOT = Path(__file__).resolve().parents[1]
     reason="Set GHOSTEXEC_RUN_DOCKER_BUILD=1 and ensure docker is installed to run this test.",
 )
 def test_server_dockerfile_builds():
+    daemon = subprocess.run(
+        ["docker", "version"],
+        cwd=str(ROOT),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    if daemon.returncode != 0:
+        pytest.skip("Docker daemon is unavailable on this machine.")
+
     image_tag = "ghostexec-env:ci"
     build_cmd = ["docker", "build", "-t", image_tag, "."]
     built = subprocess.run(
