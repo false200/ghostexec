@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 )
 def test_server_dockerfile_builds():
     image_tag = "ghostexec-env:ci"
-    build_cmd = ["docker", "build", "-t", image_tag, "-f", "server/Dockerfile", "."]
+    build_cmd = ["docker", "build", "-t", image_tag, "."]
     built = subprocess.run(
         build_cmd,
         cwd=str(ROOT),

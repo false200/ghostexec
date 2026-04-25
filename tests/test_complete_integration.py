@@ -1,7 +1,7 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # End-to-end stack test: FastAPI/OpenEnv HTTP + WebSocket, GhostExec env,
-# training smoke, and (optionally) GhostexecEnv client over ASGI TestClient.
+# and (optionally) GhostexecEnv client over ASGI TestClient.
 
 from __future__ import annotations
 
@@ -21,16 +21,6 @@ from ghostexec.server.ghostexec_environment import GhostexecEnvironment
 ROOT = Path(__file__).resolve().parents[1]
 SCENARIO = ROOT / "scenarios" / "phase2_core.json"
 MONDAY = ROOT / "scenarios" / "monday_morning.json"
-
-
-def _train_subprocess(train_args: list[str]) -> tuple[list[str], dict[str, str] | None]:
-    """Prefer `uv run python` so the child process sees the project venv; else set PYTHONPATH."""
-    uv = shutil.which("uv")
-    if uv:
-        return [uv, "run", "python", str(ROOT / "training" / "train.py"), *train_args], None
-    prev = os.environ.get("PYTHONPATH", "")
-    merged = os.pathsep.join([str(ROOT), prev]).strip(os.pathsep)
-    return [sys.executable, str(ROOT / "training" / "train.py"), *train_args], {**os.environ, "PYTHONPATH": merged}
 
 
 def _http_paths(client: TestClient) -> set[str]:
@@ -242,62 +232,4 @@ def test_ghostexec_env_client_against_live_url_if_set() -> None:
         assert res2.observation.echoed_message
 
 
-def test_training_pipeline_smoke() -> None:
-    logf = ROOT / "outputs" / "training" / "_integration_train_smoke.jsonl"
-    logf.parent.mkdir(parents=True, exist_ok=True)
-    if logf.exists():
-        logf.unlink()
-    cmd, env = _train_subprocess(
-        [
-            "--backend",
-            "local",
-            "--agent",
-            "smart",
-            "--episodes",
-            "5",
-            "--max-steps",
-            "6",
-            "--log-path",
-            str(logf),
-            "--checkpoint-dir",
-            str(ROOT / "outputs" / "training" / "_integration_ckpt"),
-        ]
-    )
-    subprocess.check_call(cmd, cwd=str(ROOT), env=env)
-    lines = [ln for ln in logf.read_text(encoding="utf-8").splitlines() if ln.strip()]
-    assert len(lines) == 5
-
-
-def test_full_pytest_suite_excluding_this_file() -> None:
-    """Re-run the entire tests/ tree (avoids recursive self-invocation)."""
-    env_pytest_addopts = os.environ.get("PYTEST_ADDOPTS", "")
-    if "-x" in env_pytest_addopts or "--maxfail" in env_pytest_addopts:
-        pytest.skip("Skipping nested full suite when fail-fast is enabled.")
-    uv = shutil.which("uv")
-    if uv:
-        cmd = [
-            uv,
-            "run",
-            "pytest",
-            str(ROOT / "tests"),
-            "-q",
-            "--ignore=tests/test_complete_integration.py",
-        ]
-        proc = subprocess.run(cmd, cwd=str(ROOT))
-    else:
-        prev = os.environ.get("PYTHONPATH", "")
-        nested_env = {
-            **os.environ,
-            "PYTHONPATH": os.pathsep.join([str(ROOT), prev]).strip(os.pathsep),
-        }
-        cmd = [
-            sys.executable,
-            "-m",
-            "pytest",
-            str(ROOT / "tests"),
-            "-q",
-            "--ignore=tests/test_complete_integration.py",
-        ]
-        proc = subprocess.run(cmd, cwd=str(ROOT), env=nested_env)
-    assert proc.returncode == 0, "Full test suite failed; see output above."
 

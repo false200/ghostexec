@@ -76,8 +76,8 @@ ENV ENABLE_WEB_INTERFACE=true
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD sh -c 'curl -f "http://localhost:${PORT:-7860}/health" || exit 1'
 
 # Same entrypoint as local `uv run server` (console script from the project venv)
 WORKDIR /app/env
-CMD ["/app/.venv/bin/server", "--port", "8000"]
+CMD ["/bin/sh", "-lc", "/app/.venv/bin/server --port ${PORT:-7860}"]

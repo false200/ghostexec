@@ -35,15 +35,6 @@ dev = [
     "pyyaml>=6.0.0",
     "matplotlib>=3.8.0",
 ]
-# Optional LM training stack (Phase 5 — extend training/train.py with TRL).
-training = [
-    "torch>=2.2,<3",
-    "transformers>=4.40",
-    "trl>=0.12.0",
-    "accelerate>=0.27",
-    "matplotlib>=3.8",
-    "datasets>=2.16.0",
-]
 # Optional JSON-schema-constrained decoding backends (pick one).
 constrained = [
     "lm-format-enforcer>=0.10",
