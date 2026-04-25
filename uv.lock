@@ -2867,6 +2867,7 @@ constrained-outlines = [
     { name = "outlines" },
 ]
 dev = [
+    { name = "matplotlib" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pyyaml" },
@@ -2885,6 +2886,7 @@ requires-dist = [
     { name = "accelerate", marker = "extra == 'training'", specifier = ">=0.27" },
     { name = "datasets", marker = "extra == 'training'", specifier = ">=2.16.0" },
     { name = "lm-format-enforcer", marker = "extra == 'constrained'", specifier = ">=0.10" },
+    { name = "matplotlib", marker = "extra == 'dev'", specifier = ">=3.8.0" },
     { name = "matplotlib", marker = "extra == 'training'", specifier = ">=3.8" },
     { name = "openenv-core", extras = ["core"], specifier = ">=0.2.3" },
     { name = "outlines", marker = "extra == 'constrained-outlines'", specifier = ">=0.1" },

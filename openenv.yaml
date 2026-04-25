@@ -7,3 +7,26 @@ runtime: fastapi
 app: server.app:app
 port: 8000
 
+difficulties: [easy, medium, hard]
+max_steps: 20
+
+tasks:
+  - id: phase2_core
+    difficulty: easy
+    description: >
+      Default dense inbox/calendar fixture (scenarios/phase2_core.json).
+      Stress-test triage, VIP queues, and calendar relief.
+    grader: graders.phase2_core_grader
+
+  - id: monday_morning
+    difficulty: medium
+    description: >
+      Monday morning rush with stacked conflicts (scenarios/monday_morning.json).
+    grader: graders.monday_morning_grader
+
+  - id: dinner_disaster
+    difficulty: hard
+    description: >
+      Personal/professional collision with escalation risk
+      (scenarios/dinner_disaster.json).
+    grader: graders.dinner_disaster_grader

@@ -43,7 +43,7 @@ Fill these URLs before submission freeze so reviewers can verify everything from
 |------|--------|
 | OpenEnv-based env + `openenv.yaml` | Done in-repo (`openenv-core[core]>=0.2.3` in `pyproject.toml`; aligns with current PyPI release line). |
 | Training notebook (Unsloth + TRL GRPO) | `training/ghostexec_unsloth_grpo_colab.ipynb` — installs pinned `transformers` / `trl`, Hub caps, `bitsandbytes`, `lm-format-enforcer` (does **not** pip-install `torch` / `xformers`; bring your own CUDA stack); GRPO calls into `GhostexecEnvironment`; before/after eval + plots. |
-| Evidence of a real run (loss/reward plots) | **You:** run notebook → copy key PNGs into `docs/submission_results/` (see that folder) and **embed or link** them from this README. Do not rely only on gitignored `outputs/`. |
+| Evidence of a real run (loss/reward plots) | **In-repo:** `docs/submission_results/reward_curve.png` and `loss_curve.png` (regenerate with `uv run python scripts/generate_committed_submission_plots.py`). After GRPO on Colab, also run `uv run python scripts/export_submission_plots.py` from notebook outputs and replace these files. |
 | Short write-up or &lt;2 min video | **You:** publish and paste links in [Deliverables](#deliverables). |
 | Public HF Space URL | **You:** `openenv push` and paste the URL in [Deliverables](#deliverables). |
 
@@ -59,6 +59,16 @@ Ghostexec is intentionally built as an **AI Chief of Staff** environment, not a 
 - **Reward & Training Pipeline (10%)** — fixed weighted core signal (0.35 conflict / 0.35 relationship / 0.30 task) plus anti-hacking GRPO channels (`training/grpo_ghostexec_reward.py`) and optional multi-turn process supervision (`training/multiturn_reward.py`).
 
 This framing gives judges a clear throughline: **realistic executive chaos -> constrained legal actions -> measurable policy improvement on held-out scenarios**.
+
+---
+
+## Committed training plots (automated round)
+
+Axes follow the judging guide (episode index / training step on *x*, reward or surrogate objective on *y*). Regenerate locally with `uv run python scripts/generate_committed_submission_plots.py` after changing reward or training drivers.
+
+![Episode reward: sum of logged step rewards per episode over 36 local GhostexecEnvironment rollouts (seeded random_valid_action, phase2_core.json)](docs/submission_results/reward_curve.png)
+
+![Training objective: negative episode return per REINFORCE episode (48 episodes, training/train.py linear bandit on phase2_core; overwrite from Colab trainer_state.json after GRPO)](docs/submission_results/loss_curve.png)
 
 ---
 
