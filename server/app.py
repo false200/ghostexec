@@ -29,7 +29,6 @@ Usage:
 """
 
 import os
-from pathlib import Path
 
 try:
     import openenv.core.env_server.http_server as _openenv_http
@@ -55,42 +54,30 @@ def _ghostexec_serialize_observation(observation):  # type: ignore[no-untyped-de
 _openenv_http.serialize_observation = _ghostexec_serialize_observation
 
 from openenv.core.env_server.http_server import create_app  # noqa: E402
+import openenv.core.env_server.web_interface as _openenv_web  # noqa: E402
+
+# Gradio renders readme_content as Markdown; embedding README.md shows YAML frontmatter
+# as plain text. Point users at the Hub-rendered README instead.
+_orig_load_environment_metadata = _openenv_web.load_environment_metadata
 
 
-def _configure_openenv_readme_path() -> None:
-    """Ensure OpenEnv's web UI can resolve README (Gradio accordion).
-
-    OpenEnv tries /app/README.md first, then ENV_README_PATH. The Dockerfile
-    copies README to /app/README.md; this also sets ENV_README_PATH when a
-    preset points at a missing file (common on some hosts) so the loader does
-    not skip valid fallbacks.
-    """
-    cur = os.environ.get("ENV_README_PATH")
-    if cur:
-        try:
-            p = Path(cur)
-            if p.is_file() and p.stat().st_size > 0:
-                return
-        except OSError:
-            pass
-        os.environ.pop("ENV_README_PATH", None)
-
-    _here = Path(__file__).resolve()
-    for candidate in (
-        Path("/app/env/README.md"),
-        Path("/app/README.md"),
-        _here.parent.parent / "README.md",
-        Path.cwd() / "README.md",
-    ):
-        try:
-            if candidate.is_file() and candidate.stat().st_size > 0:
-                os.environ["ENV_README_PATH"] = str(candidate)
-                return
-        except OSError:
-            continue
+def _ghostexec_load_environment_metadata(env, env_name=None):  # type: ignore[no-untyped-def]
+    meta = _orig_load_environment_metadata(env, env_name)
+    space = (os.environ.get("SPACE_ID") or "").strip()
+    if not space or space.startswith("<"):
+        space = "modelbuilderhq/ghostexec"
+    readme_url = f"https://huggingface.co/spaces/{space}/blob/main/README.md"
+    space_url = f"https://huggingface.co/spaces/{space}"
+    meta.readme_content = (
+        "### README\n\n"
+        f"Formatted documentation (Space card + full markdown): "
+        f"[**README.md on Hugging Face**]({readme_url})\n\n"
+        f"Space: [**{space}**]({space_url})"
+    )
+    return meta
 
 
-_configure_openenv_readme_path()
+_openenv_web.load_environment_metadata = _ghostexec_load_environment_metadata
 
 try:
     # Editable / normal install (package name `ghostexec`).
