@@ -36,9 +36,7 @@ The agent gets a dense plain-text briefing, takes one structured action, and is 
 - **Trainable reward signal**: dense step reward for learning plus bounded graders for evaluation.
 - **Hackathon fit**: fully OpenEnv-packaged, hostable on HF Spaces, with reproducible training and visible before/after evidence.
 
-## Judging-Criteria Mapping
-
-### 1) Environment Innovation (40%)
+### 1) Our Inovation
 
 - The observation is a realistic text briefing, not a toy tabular state dump.
 - Actions are schema-bound (`GhostexecAction`) and validated against live world ids.
@@ -53,7 +51,7 @@ The agent gets a dense plain-text briefing, takes one structured action, and is 
 | `monday_morning` | medium | `scenarios/monday_morning.json` |
 | `dinner_disaster` | hard | `scenarios/dinner_disaster.json` |
 
-### 2) Storytelling and Presentation (30%)
+### 2) Overview
 
 Ghostexec tells a familiar high-stakes story: too many urgent asks, not enough time, and every action has social + operational consequences.
 
@@ -62,7 +60,7 @@ The demo is easy to follow:
 2. compare weak vs better action choice,
 3. show reward movement and policy behavior improvements.
 
-### 3) Showing Improvement in Rewards (20%)
+### 3) Improvement in Rewards
 
 The repo includes persisted training artifacts and plot outputs:
 
@@ -89,7 +87,7 @@ The repo includes persisted training artifacts and plot outputs:
 | Invalid action rate | `Not logged in saved artifacts` | `Not logged in saved artifacts` |
 | Grader score | `Not logged in saved artifacts` | `Not logged in saved artifacts` |
 
-### 4) Reward and Training Pipeline (10%)
+### 4) Reward and Training Pipeline 
 
 Ghostexec uses a coherent weighted reward core plus bounded shaping:
 
