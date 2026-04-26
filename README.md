@@ -11,326 +11,123 @@ tags:
   - openenv
 ---
 
-# Ghostexec
+# Ghostexec: The AI Chief-of-Staff Environment
 
-**Ghostexec** is an [OpenEnv](https://github.com/meta-pytorch/OpenEnv)-compatible environment: a busy **executive chief-of-staff** simulator with inbox, calendar, contacts, tasks, and stakeholder moods. The agent must read a **plain-text briefing**, then emit **one structured action per step** (`reply_email`, `reschedule_meeting`, …). The server returns rewards shaped around **conflict**, **relationships**, and **tasks**—plus trajectory **graders** for hackathon validation. All episode **content** lives in `scenarios/*.json`; the engine is in `server/ghostexec_environment.py` and `server/reward.py`.
+Ghostexec is an [OpenEnv](https://github.com/meta-pytorch/OpenEnv)-compliant environment where an LLM acts as an executive chief-of-staff under pressure: triaging inbox crises, resolving calendar conflicts, protecting stakeholder relationships, and finishing critical tasks.
 
-| Item | Value |
-|------|--------|
-| **HF Space name / manifest** | `ghostexec` in [`openenv.yaml`](openenv.yaml) |
-| **Python package** | `openenv-ghostexec` in [`pyproject.toml`](pyproject.toml) (import `ghostexec`) |
-| **Public Space** | [modelbuilderhq/ghostexec](https://huggingface.co/spaces/modelbuilderhq/ghostexec) |
-| **Deeper innovation-only brief** | [`environment-innovation/README.md`](environment-innovation/README.md) |
+The agent gets a dense plain-text briefing, takes one structured action, and is scored on three coupled dimensions: conflict reduction, relationship quality, and task progress.
 
----
+## Submission Package
 
-## Deliverables (fill before freeze)
+| Item | Link |
+|------|------|
+| Public HF Space (required) | [modelbuilderhq/ghostexec](https://huggingface.co/spaces/modelbuilderhq/ghostexec) |
+| OpenEnv manifest | [`openenv.yaml`](openenv.yaml) |
+| Training notebook (Colab-ready) | [`notebooks/ghostexec_unsloth_grpo_hf_api.ipynb`](notebooks/ghostexec_unsloth_grpo_hf_api.ipynb) |
+| Minimal training script (Unsloth + TRL) | [`scripts/train_sft_then_grpo.py`](scripts/train_sft_then_grpo.py) |
+| Mini-blog (required) | `ADD_HF_BLOG_URL_HERE` |
+| Demo video <2 minutes (required) | `ADD_YOUTUBE_URL_HERE` |
 
-| Deliverable | URL |
-|-------------|-----|
-| Public HF Space (required) | [https://huggingface.co/spaces/modelbuilderhq/ghostexec](https://huggingface.co/spaces/modelbuilderhq/ghostexec) |
-| Write-up / blog (HF post preferred) | `TODO: paste your post URL` |
-| Short demo video (&lt;2 min) | `TODO: paste your video URL` |
+## Why This Environment Is Competitive
 
----
+- **Novel task composition**: combines language-heavy triage, social reasoning, scheduling constraints, and deadline management in a single trainable loop.
+- **Non-trivial behavior**: valid JSON is necessary but not sufficient; the policy must choose useful actions on the right entity ids at the right time.
+- **Dynamic world model**: mood shifts, conflict rebuilds, overdue penalties, and scenario drift events force adaptation over a trajectory.
+- **Trainable reward signal**: dense step reward for learning plus bounded graders for evaluation.
+- **Hackathon fit**: fully OpenEnv-packaged, hostable on HF Spaces, with reproducible training and visible before/after evidence.
 
-## Contents
+## Judging-Criteria Mapping
 
-**Judging criteria (this README is organized around them)**
+### 1) Environment Innovation (40%)
 
-1. [Criterion: Environment Innovation (40%)](#ghostexec-env-innovation)
-2. [Criterion: Storytelling & Presentation (30%)](#ghostexec-storytelling)
-3. [Criterion: Showing Improvement in Rewards (20%)](#ghostexec-reward-improvement)
-4. [Criterion: Reward & Training Pipeline (10%)](#ghostexec-reward-pipeline)
+- The observation is a realistic text briefing, not a toy tabular state dump.
+- Actions are schema-bound (`GhostexecAction`) and validated against live world ids.
+- The world evolves after each step (conflict graph, stress, mood, time shifts).
+- Drift events in scenario data test robustness to changing conditions.
 
-**Reference**
+**Task ladder**
 
-5. [Hackathon themes & checklist](#openenv-hackathon-themes--checklist)
-6. [Quick start](#quick-start-python-client)
-7. [Actions](#actions-and-fields)
-8. [Observation](#observation)
-9. [Reward (formula summary)](#reward-formula-summary)
-10. [HTTP vs WebSocket](#http-vs-websocket-episode-state)
-11. [Running and testing locally](#running-and-testing-locally)
-12. [Hugging Face Spaces](#hugging-face-spaces)
-13. [Scenarios](#scenarios)
-14. [Project layout](#project-layout)
-15. [Resources & references](#resources--references)
-16. [License](#license)
+| Task ID | Difficulty | Scenario |
+|---------|------------|----------|
+| `phase2_core` | easy | `scenarios/phase2_core.json` |
+| `monday_morning` | medium | `scenarios/monday_morning.json` |
+| `dinner_disaster` | hard | `scenarios/dinner_disaster.json` |
 
----
+### 2) Storytelling and Presentation (30%)
 
-## Criterion: Environment Innovation (40%)
+Ghostexec tells a familiar high-stakes story: too many urgent asks, not enough time, and every action has social + operational consequences.
 
-<a id="ghostexec-env-innovation"></a>
+The demo is easy to follow:
+1. show the same briefing the model sees,
+2. compare weak vs better action choice,
+3. show reward movement and policy behavior improvements.
 
-**Weight:** 40%
+### 3) Showing Improvement in Rewards (20%)
 
-**What it means:**
+The repo includes persisted training artifacts and plot outputs:
 
-- Is the environment novel, creative, or genuinely challenging?
-- Does it meaningfully test agent behavior in a way that hasn't been done before?
+- `output/reward_curve.png`
+- `output/loss_curve.png`
+- `output/baseline_comparison.png`
 
-### How Ghostexec answers this
+**Training evidence plots**
 
-**Challenging world.** The policy sees **one dense natural-language briefing** per step (emails, calendar overlaps, contacts with mood, overdue tasks, stress, steps remaining)—not a JSON dump of the world. It must **ground** decisions in real ids from that text, return **valid typed actions**, and accept **time pressure** and **social fallout** when meetings move or mail goes unanswered. Invalid actions **do not crash** the server; they return structured errors so learning signals stay intact.
+![Reward curve](output/reward_curve.png)
+*Reward trend across training progression.*
 
-**Meaningful behavior, not a toy Q&A.** Success needs **comprehension + tool discipline**: legal JSON schema, multi-step **sequences** (WebSocket sessions for real episodes), and **tradeoffs** across channels (mail vs calendar vs tasks vs relationships). **`do_nothing` is penalised** so “safe” idleness is costly when fires are burning.
+![Loss curve](output/loss_curve.png)
+*SFT/GRPO training loss over optimization steps.*
 
-**Dynamics, not a static paragraph.** After each valid action, the simulation **advances the clock**, updates **moods**, rebuilds **conflicts**, and can apply **scenario-driven drift** (`after_step` events in JSON): shifted meetings, new deadlines, preference changes—so the agent is tested on **adaptation**, not memorizing the first screen.
+![Baseline comparison](output/baseline_comparison.png)
+*Random vs frozen vs trained policy mean episode reward.*
 
-**Dual evaluation.** **Dense step rewards** in `server/reward.py` teach fine structure; **trajectory graders** in `graders.py` return scores strictly in **`(0.01, 0.99)`** per OpenEnv task wiring in `openenv.yaml`. Agents learn from the dense signal; judges get bounded certification scores.
+**Current before/after metrics (from saved artifacts)**
 
-**Honest novelty claim.** Inboxes and calendars are familiar **ingredients**. What is less common is the **composition**: OpenEnv-native packaging, **plain-text-only** observations, **data-defined** scenarios, live dynamics + drift, dual reward/grader stack, and a **transactional** action API in one trainable, hostable environment.
+| Metric | Baseline | Trained |
+|--------|----------|---------|
+| Mean step reward | `0.145` | `0.257` |
+| Invalid action rate | `Not logged in saved artifacts` | `Not logged in saved artifacts` |
+| Grader score | `Not logged in saved artifacts` | `Not logged in saved artifacts` |
 
-### Task ladder (difficulty in data)
+### 4) Reward and Training Pipeline (10%)
 
-| Task id | Difficulty | Scenario | What gets harder |
-|---------|------------|----------|------------------|
-| `phase2_core` | easy | `scenarios/phase2_core.json` | Dense triage: VIP mail, calendar relief, overlapping work. |
-| `monday_morning` | medium | `scenarios/monday_morning.json` | Stacked Monday rush, less slack. |
-| `dinner_disaster` | hard | `scenarios/dinner_disaster.json` | Personal vs professional collision, escalation risk. |
-
-### 5-minute verification checklist
-
-1. **`openenv.yaml`** — three tasks, `max_steps`, `app: server.app:app`, `name: ghostexec`, grader paths.
-2. **`scenarios/*.json`** — world content is **data**, not hardcoded lore in Python.
-3. **`server/ghostexec_environment.py`** — `build_briefing_text`, `_apply_action`, post-step dynamics, schema drift hooks.
-4. **`server/reward.py`** — fixed 0.35 / 0.35 / 0.30 core, invalid / idle handling, shaping caps.
-5. **`graders.py`** — bounded grader outputs, trajectory consumption.
-6. **Live Space** — `/docs` or `POST /reset` + `POST /step`: legal steps change state; illegal steps return errors, not stack traces.
-
-For a **standalone** walkthrough of the innovation angle only, see **[environment-innovation/README.md](environment-innovation/README.md)**.
-
----
-
-## Criterion: Storytelling & Presentation (30%)
-
-<a id="ghostexec-storytelling"></a>
-
-**Weight:** 30%
-
-**What it means:**
-
-- Can you clearly explain the problem, the environment, and what the agent learned?
-- Is the demo engaging and easy to follow for a non-technical audience?
-
-### The problem (plain language)
-
-An executive’s day is **messy**: urgent email from a board member, a double-booked calendar, a spouse texting about dinner, a report due at noon, and every choice **ripples**—someone feels heard or ignored, a conflict gets better or worse, a task slips or gets done. Ghostexec turns that into a **small simulator** the model must **run**, not a single paragraph to summarize.
-
-### The environment (one sentence)
-
-**You read a realistic staff briefing; you pick one legal “move” (reply, reschedule, delegate, …); the world updates; you get a score that reflects tension across work, people, and tasks.**
-
-### What the agent is supposed to learn
-
-- **Read carefully** — wrong `email_id` / `meeting_id` / `task_id` fails cleanly with feedback.
-- **Act under pressure** — clock, `max_steps`, and stress push toward decisions, not endless analysis.
-- **Balance competing goals** — improving relationships can conflict with clearing the calendar or finishing tasks; rewards encode that tradeoff.
-- **Recover from change** — drift events mean the “right” plan from step 1 may not stay right at step 8.
-
-### Demo tips for a non-technical audience
-
-1. **Show the briefing first** — let viewers see the same wall of text the model sees (relatable chaos).
-2. **Show one good step vs one bad step** — e.g. thoughtful reply vs invalid id or `do_nothing` while critical mail waits (mood / reward visibly differ).
-3. **Name the three “channels”** — calmer calendar, happier stakeholders, tasks moving forward—without math jargon.
-4. **End on “what improved”** — after training, pick the same scenario and show fewer invalid steps, higher rewards, or a grader curve (ties to the 20% section below).
-
-### Hackathon alignment (themes)
-
-**Theme fit (examples):** Ghostexec fits **Theme 3.2 — Personalized tasks** (executive-style inbox, calendar, delegation). **Theme 4** is partially supported via `GHOSTEXEC_CURRICULUM`, `GHOSTEXEC_PERTURB`, and diverse `scenarios/`.
-
----
-
-## Criterion: Showing Improvement in Rewards (20%)
-
-<a id="ghostexec-reward-improvement"></a>
-
-**Weight:** 20%
-
-**What it means:**
-
-- Is there observable evidence of training progress? Reward curves, before/after behavior, comparison against a baseline—anything that proves the agent learned something.
-
-### Where evidence lives in this repo
-
-| Artifact | Role |
-|----------|------|
-| `outputs/logs/episode_rewards.jsonl` | Per-step reward trace (gitignored); use for **reward curves** and component debugging. |
-| `outputs/trainer_state.json` / training logs | Produced by training scripts when configured; feed into plotting. |
-| `outputs/reward_log.csv` | Optional CSV companion for plotting pipelines. |
-| `outputs/compliance_manifest.json` | Baseline / compliance metadata for **comparison** charts. |
-| `outputs/plots/*.png` | Generated report figures (see command below). |
-
-**Plot pack (loss + reward + components + baseline bar):**
-
-```bash
-uv run python scripts/plot_training_report.py \
-  --trainer-history outputs/trainer_state.json \
-  --reward-csv outputs/reward_log.csv \
-  --baselines-json outputs/compliance_manifest.json \
-  --out-dir outputs/plots
-```
-
-Writes `loss_curve.png`, `reward_curve.png`, `components_curve.png`, `baseline_comparison.png` under `outputs/plots/`.
-
-**End-to-end notebook:** [`notebooks/ghostexec_unsloth_grpo_hf_api.ipynb`](notebooks/ghostexec_unsloth_grpo_hf_api.ipynb) is intended to **Run All** without manual steps (per project convention).
-
-**Before / after narrative for judges:** same `task_id` and seed—show **lower invalid rate**, **higher mean step reward**, or **clearer grader trajectory** after finetuning. Pair numbers with **one short clip** of two runs side by side on the Space or local server.
-
----
-
-## Criterion: Reward & Training Pipeline (10%)
-
-<a id="ghostexec-reward-pipeline"></a>
-
-**Weight:** 10%
-
-**What it means:**
-
-- Is the reward logic coherent?
-- Does the pipeline produce meaningful improvement in the trained agent's behavior?
-
-### Reward logic (coherent and inspectable)
-
-Phase-4 scoring in `server/reward.py` uses a **fixed** core blend:
+Ghostexec uses a coherent weighted reward core plus bounded shaping:
 
 \[
-\text{weighted base} = 0.35 \cdot \text{conflict} + 0.35 \cdot \text{relationship} + 0.30 \cdot \text{task}
+\text{weighted\_base} = 0.35 \cdot \text{conflict} + 0.35 \cdot \text{relationship} + 0.30 \cdot \text{task}
 \]
 
-Then bounded shaping, invalid-step handling, and explicit penalties (including **`do_nothing`**). Components surface on `RewardBreakdown` and in observation **metadata** where configured—so “why did this step score X?” is **auditable**, not a black box.
+Then applies structured adjustments (invalid-action penalties, do-nothing pressure, completion/catastrophic terms) with transparent breakdown fields.
 
-Design rationale is aligned with dense reward-shaping practice (see [arXiv:2408.10215](https://arxiv.org/abs/2408.10215))—fixed channel weights, bounded magnitudes, sparse end-of-episode avoided for training.
+Training is end-to-end and environment-connected (not static-only): SFT warm start, then GRPO with environment reward plus local shaping functions.
 
-### Training pipeline (entrypoints)
-
-| Step | Command / artifact |
-|------|---------------------|
-| Install | `uv sync` (from repo root) |
-| Server (matches Dockerfile) | `uv run server --port 8000` |
-| SFT → GRPO script | `uv run python scripts/train_sft_then_grpo.py` (see [Running and testing locally](#running-and-testing-locally) for a full example invocation) |
-| Tests | `uv run pytest tests/ -q` |
-| Docker build gate | `GHOSTEXEC_RUN_DOCKER_BUILD=1 uv run pytest tests/test_docker_build.py -q` |
-
-The pipeline is **meaningful** when tied to the **20% evidence** above: same env URL, logged rewards, and plots that move in the right direction over training—not when loss alone decreases.
-
----
-
-## OpenEnv Hackathon themes & checklist
-
-| Item | Status |
-|------|--------|
-| OpenEnv-based env + `openenv.yaml` | In-repo (`openenv-core[core]>=0.2.3`). |
-| Short write-up or &lt;2 min video | **You:** publish and paste URLs in [Deliverables](#deliverables-fill-before-freeze). |
-| Public HF Space | [Deliverables](#deliverables-fill-before-freeze); deploy with `openenv push --repo-id <your>/ghostexec`. |
-
----
-
-## Quick start (Python client)
-
-From the repo root (where `pyproject.toml` lives):
+## Quick Start
 
 ```bash
 uv sync
 uv run server --port 8000
 ```
 
+Python client example:
+
 ```python
 from ghostexec import GhostexecAction, GhostexecEnv
 
 with GhostexecEnv(base_url="http://127.0.0.1:8000") as env:
     out = env.reset()
-    print(out.observation.echoed_message[:500], "…")
+    print(out.observation.echoed_message[:400], "...")
 
     step = env.step(
         GhostexecAction(
             action_type="reply_email",
             email_id="e01",
-            message_body=(
-                "Marcus — acknowledged. Revised figures and short rationale "
-                "before noon. — Exec"
-            ),
+            message_body="Acknowledged. Sending concise revised update before noon.",
         )
     )
     print("reward:", step.reward)
-    print("metadata keys:", sorted((step.observation.metadata or {}).keys()))
 ```
 
-**Docker (optional):**
-
-```bash
-docker build -t ghostexec-env:latest .
-```
-
----
-
-## Actions and fields
-
-`GhostexecAction` (`models.py`):
-
-| `action_type` | Typical fields |
-|---------------|----------------|
-| `reply_email` | `email_id`, `message_body` |
-| `archive_email` | `email_id` |
-| `reschedule_meeting` | `meeting_id`, `new_time`, `reason` |
-| `cancel_meeting` | `meeting_id`, `reason` |
-| `complete_task` | `task_id` |
-| `delegate_task` | `task_id`, `contact_name` |
-| `send_message` | `contact_name`, `message` |
-| `do_nothing` | — (penalised path) |
-
-Malformed HTTP payloads are handled safely so clients do not crash the server.
-
----
-
-## Observation
-
-- **`echoed_message`** — Full plain-text briefing.
-- **`message_length`** — Length of briefing.
-- **`reward`**, **`done`**, **`metadata`** — Step outcome; metadata includes `step_ok`, reward breakdown fields, and debug ids.
-
----
-
-## Reward (formula summary)
-
-Full detail is under [Criterion: Reward & Training Pipeline (10%)](#criterion-reward--training-pipeline-10). Episode logs: `outputs/logs/episode_rewards.jsonl` (gitignored).
-
----
-
-## HTTP vs WebSocket (episode state)
-
-- **HTTP** `POST /reset` and `POST /step` may use **short-lived** instances; consecutive HTTP calls might not share one in-memory episode.
-- **WebSocket `/ws`** (or `GhostexecEnv`) — use for **multi-step episodes** on one session.
-
-Endpoints: **`/web`**, **`/docs`**, **`/health`**, **`/ws`**.
-
----
-
-## Running and testing locally
-
-```bash
-uv run uvicorn ghostexec.server.app:app --reload --host 0.0.0.0 --port 8000
-# or
-uv run server --port 8000
-```
-
-**HTTP smoke:**
-
-```bash
-uv run python scripts/http_endpoint_smoke.py --local
-```
-
-**Tests:**
-
-```bash
-uv run pytest tests/ -q
-GHOSTEXEC_RUN_DOCKER_BUILD=1 uv run pytest tests/test_docker_build.py -q
-uv run pytest tests/test_live_server_exhaustive.py -v --tb=short   # server on :8000
-```
-
-**SFT → GRPO (example):**
+## Reproducible Training Commands
 
 ```bash
 uv run python scripts/train_sft_then_grpo.py \
@@ -347,36 +144,63 @@ uv run python scripts/train_sft_then_grpo.py \
   --curriculum-ramp-ratio 0.60
 ```
 
----
+Generate post-train plots:
 
-## Hugging Face Spaces
+```bash
+uv run python scripts/plot_training_report.py \
+  --trainer-history outputs/trainer_state.json \
+  --reward-csv outputs/reward_log.csv \
+  --baselines-json outputs/compliance_manifest.json \
+  --out-dir output
+```
+
+## OpenEnv and Space Deployment
 
 ```bash
 openenv serve
 openenv build
 openenv validate --verbose
 openenv push
-# openenv push --repo-id your-username/ghostexec
 ```
 
-Use a **public** Space for the default hackathon flow. `openenv.yaml` carries **name**, **version**, and **description** for metadata—keep them in sync with submission needs.
+If needed:
 
----
-
-## Scenarios
-
-| File | Role |
-|------|------|
-| `scenarios/phase2_core.json` | Default dense fixture |
-| `scenarios/monday_morning.json`, `dinner_disaster.json`, `vip_meltdown.json` | Narrative pressure |
-| `scenarios/vip_meltdown_drift.json` | Mood / escalation drift |
-| `scenarios/schema_drift_test.json` | Drift-event harness |
-
----
-
-## Project layout
-
+```bash
+openenv push --repo-id your-username/ghostexec
 ```
+
+## Environment API and Contract
+
+- Core endpoints: `/reset`, `/step`, `/state`, `/schema`, `/health`, `/docs`, `/ws`
+- Observation contains:
+  - `echoed_message` (plain-text briefing),
+  - optional metadata (step validity, reward breakdown, ids).
+- Action schema: see `GhostexecAction` in [`models.py`](models.py).
+
+Supported `action_type` values:
+
+- `reply_email`
+- `archive_email`
+- `reschedule_meeting`
+- `cancel_meeting`
+- `complete_task`
+- `delegate_task`
+- `send_message`
+- `do_nothing`
+
+## Submission Readiness Checklist
+
+- [x] OpenEnv latest-compatible environment with valid `openenv.yaml`
+- [x] Public HF Space deployed and reachable
+- [x] Minimal trainable script using Unsloth + TRL
+- [x] Colab-ready notebook for reruns
+- [x] Training evidence plots embedded in README
+- [ ] Add HF blog link
+- [ ] Add <2 minute YouTube demo link
+
+## Repository Structure
+
+```text
 ghostexec/
 ├── openenv.yaml
 ├── pyproject.toml
@@ -387,24 +211,20 @@ ghostexec/
 ├── scripts/
 ├── notebooks/
 ├── tests/
+├── output/
 └── server/
     ├── app.py
     ├── ghostexec_environment.py
-    ├── reward.py
-    └── Dockerfile
+    └── reward.py
 ```
 
----
+## Additional References
 
-## Resources & references
-
-- [meta-pytorch/OpenEnv](https://github.com/meta-pytorch/OpenEnv) — core stack  
-- [Packaging & Deploying](https://meta-pytorch.org/OpenEnv/auto_getting_started/environment-builder.html)  
-- [OpenEnv Hub](https://huggingface.co/openenv)  
-- [Building RL Environments with OpenEnv](https://www.youtube.com/watch?v=0airz7BhBiA) (and related talks linked in prior README iterations)
-
----
+- [OpenEnv (Meta PyTorch)](https://github.com/meta-pytorch/OpenEnv)
+- [OpenEnv Packaging and Deploying Docs](https://meta-pytorch.org/OpenEnv/auto_getting_started/environment-builder.html)
+- [OpenEnv Hub](https://huggingface.co/openenv)
+- [Environment Innovation Deep-Dive](environment-innovation/README.md)
 
 ## License
 
-BSD-style — see license notices in source files (Meta / OpenEnv lineage).
+BSD-style license as included in this repository and upstream OpenEnv lineage notices.
