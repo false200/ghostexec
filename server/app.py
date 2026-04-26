@@ -28,6 +28,9 @@ Usage:
     python -m server.app
 """
 
+import os
+from pathlib import Path
+
 try:
     import openenv.core.env_server.http_server as _openenv_http
 except Exception as e:  # pragma: no cover
@@ -52,6 +55,28 @@ def _ghostexec_serialize_observation(observation):  # type: ignore[no-untyped-de
 _openenv_http.serialize_observation = _ghostexec_serialize_observation
 
 from openenv.core.env_server.http_server import create_app  # noqa: E402
+
+
+def _configure_openenv_readme_path() -> None:
+    """OpenEnv Gradio sidebar loads README from /app/README.md or ENV_README_PATH only.
+
+    Our Docker layout copies the repo to /app/env/, so README.md lives at
+    /app/env/README.md. Set ENV_README_PATH before create_app so the Playground
+    shows the README instead of "No README available."
+    """
+    if os.environ.get("ENV_README_PATH"):
+        return
+    _here = Path(__file__).resolve()
+    for candidate in (
+        Path("/app/env/README.md"),  # HF Space / openenv Docker layout
+        _here.parent.parent / "README.md",  # repo root when running from source
+    ):
+        if candidate.is_file():
+            os.environ["ENV_README_PATH"] = str(candidate)
+            return
+
+
+_configure_openenv_readme_path()
 
 try:
     # Editable / normal install (package name `ghostexec`).
