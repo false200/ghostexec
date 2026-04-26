@@ -60,7 +60,7 @@ packages = ["ghostexec", "ghostexec.server"]
 package-dir = { "ghostexec" = ".", "ghostexec.server" = "server" }
 
 [tool.setuptools.package-data]
-ghostexec = ["scenarios/*.json"]
+ghostexec = ["scenarios/*.json", "README.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

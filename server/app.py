@@ -58,22 +58,36 @@ from openenv.core.env_server.http_server import create_app  # noqa: E402
 
 
 def _configure_openenv_readme_path() -> None:
-    """OpenEnv Gradio sidebar loads README from /app/README.md or ENV_README_PATH only.
+    """Ensure OpenEnv's web UI can resolve README (Gradio accordion).
 
-    Our Docker layout copies the repo to /app/env/, so README.md lives at
-    /app/env/README.md. Set ENV_README_PATH before create_app so the Playground
-    shows the README instead of "No README available."
+    OpenEnv tries /app/README.md first, then ENV_README_PATH. The Dockerfile
+    copies README to /app/README.md; this also sets ENV_README_PATH when a
+    preset points at a missing file (common on some hosts) so the loader does
+    not skip valid fallbacks.
     """
-    if os.environ.get("ENV_README_PATH"):
-        return
+    cur = os.environ.get("ENV_README_PATH")
+    if cur:
+        try:
+            p = Path(cur)
+            if p.is_file() and p.stat().st_size > 0:
+                return
+        except OSError:
+            pass
+        os.environ.pop("ENV_README_PATH", None)
+
     _here = Path(__file__).resolve()
     for candidate in (
-        Path("/app/env/README.md"),  # HF Space / openenv Docker layout
-        _here.parent.parent / "README.md",  # repo root when running from source
+        Path("/app/env/README.md"),
+        Path("/app/README.md"),
+        _here.parent.parent / "README.md",
+        Path.cwd() / "README.md",
     ):
-        if candidate.is_file():
-            os.environ["ENV_README_PATH"] = str(candidate)
-            return
+        try:
+            if candidate.is_file() and candidate.stat().st_size > 0:
+                os.environ["ENV_README_PATH"] = str(candidate)
+                return
+        except OSError:
+            continue
 
 
 _configure_openenv_readme_path()

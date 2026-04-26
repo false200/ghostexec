@@ -65,6 +65,10 @@ COPY --from=builder /app/env/.venv /app/.venv
 # Copy the environment code
 COPY --from=builder /app/env /app/env
 
+# OpenEnv's Gradio sidebar reads README from /app/README.md before ENV_README_PATH.
+# The repo lives under /app/env; copy so the web UI always finds the full README.
+COPY --from=builder /app/env/README.md /app/README.md
+
 # Set PATH to use the virtual environment
 ENV PATH="/app/.venv/bin:$PATH"
 
