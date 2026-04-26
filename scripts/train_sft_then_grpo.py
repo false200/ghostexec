@@ -67,115 +67,6 @@ TRAINING_PRESETS: dict[str, dict[str, float | int | str]] = {
 }
 
 
-def _as_float(x: object | None) -> float | None:
-    if x is None:
-        return None
-    try:
-        return float(x)
-    except Exception:
-        return None
-
-
-class StabilityTripwire(TrainerCallback):
-    """Stop training when logs show sustained reward collapse + loss blow-up."""
-
-    def __init__(
-        self,
-        *,
-        min_step: int,
-        reward_key: str,
-        loss_key: str,
-        reward_drop: float,
-        loss_spike: float,
-        bad_streak: int,
-    ) -> None:
-        self.min_step = min_step
-        self.reward_key = reward_key
-        self.loss_key = loss_key
-        self.reward_drop = reward_drop
-        self.loss_spike = loss_spike
-        self.bad_streak = bad_streak
-        self._best_reward: float | None = None
-        self._best_loss: float | None = None
-        self._streak = 0
-
-    def on_log(self, args, state, control, logs=None, **kw):  # type: ignore[no-untyped-def]
-        logs = logs or {}
-        step = int(getattr(state, "global_step", 0) or 0)
-        if step < self.min_step:
-            return control
-
-        r = _as_float(logs.get(self.reward_key))
-        loss = _as_float(logs.get(self.loss_key))
-
-        reward_bad = False
-        loss_bad = False
-
-        if r is not None:
-            if self._best_reward is None or r > self._best_reward:
-                self._best_reward = r
-            elif self._best_reward is not None and self._best_reward - r >= self.reward_drop:
-                reward_bad = True
-
-        if loss is not None:
-            if self._best_loss is None or loss < self._best_loss:
-                self._best_loss = loss
-            elif self._best_loss is not None and loss - self._best_loss >= self.loss_spike:
-                loss_bad = True
-
-        bad = reward_bad and loss_bad and r is not None and loss is not None
-
-        if bad:
-            self._streak += 1
-        else:
-            self._streak = 0
-
-        if self._streak >= self.bad_streak:
-            print(
-                f"[STABILITY] stopping: sustained instability "
-                f"(best {self.reward_key}={self._best_reward}, best loss={self._best_loss}, streak={self._streak})."
-            )
-            control.should_training_stop = True
-        return control
-
-
-class LossSpikeTripwire(TrainerCallback):
-    """SFT guardrail: stop if loss repeatedly blows up vs the best-so-far."""
-
-    def __init__(self, *, min_step: int, loss_key: str, loss_spike: float, bad_streak: int) -> None:
-        self.min_step = min_step
-        self.loss_key = loss_key
-        self.loss_spike = loss_spike
-        self.bad_streak = bad_streak
-        self._best_loss: float | None = None
-        self._streak = 0
-
-    def on_log(self, args, state, control, logs=None, **kw):  # type: ignore[no-untyped-def]
-        logs = logs or {}
-        step = int(getattr(state, "global_step", 0) or 0)
-        if step < self.min_step:
-            return control
-
-        loss = _as_float(logs.get(self.loss_key))
-        if loss is None:
-            return control
-
-        if self._best_loss is None or loss < self._best_loss:
-            self._best_loss = loss
-            self._streak = 0
-            return control
-
-        if self._best_loss is not None and loss - self._best_loss >= self.loss_spike:
-            self._streak += 1
-        else:
-            self._streak = 0
-
-        if self._streak >= self.bad_streak:
-            print(f"[STABILITY] stopping SFT: repeated loss spikes (best={self._best_loss}, streak={self._streak}).")
-            control.should_training_stop = True
-        return control
-
-
 def _extract_briefing(reset_payload: dict[str, Any]) -> str:
     obs = reset_payload.get("observation", reset_payload)
     if isinstance(obs, dict):
@@ -251,7 +142,6 @@ def run_sft_then_grpo(
     grpo_grad_accum: int,
     grpo_beta: float,
     reward_ema_decay: float,
-    stability_tripwire: bool,
 ) -> None:
     try:
         from datasets import load_dataset
@@ -315,16 +205,6 @@ def run_sft_then_grpo(
         dataset_text_field="prompt",
         formatting_func=lambda ex: [f"{p}\n\n{c}" for p, c in zip(ex["prompt"], ex["completion"])],
     )
-    if stability_tripwire:
-        sft_trainer.add_callback(
-            LossSpikeTripwire(
-                min_step=max(10, max_sft_steps // 6),
-                loss_key="loss",
-                loss_spike=0.85,
-                bad_streak=4,
-            )
-        )
-
     sft_before = _trainable_lora_sum_abs(policy)
     sft_trainer.train()
     sft_after = _trainable_lora_sum_abs(sft_trainer.model)
@@ -482,25 +362,13 @@ def run_sft_then_grpo(
         adam_beta2=0.95,
         report_to=[],
     )
-    grpo_callbacks = [_ProgressCallback()]
-    if stability_tripwire:
-        grpo_callbacks.append(
-            StabilityTripwire(
-                min_step=max(15, max_grpo_steps // 8),
-                reward_key="rewards/env_reward/mean",
-                loss_key="loss",
-                reward_drop=0.12,
-                loss_spike=0.35,
-                bad_streak=3,
-            )
-        )
     grpo_trainer = GRPOTrainer(
         model=sft_trainer.model,
         processing_class=tokenizer,
         reward_funcs=[env_reward, format_reward, semantic_action_reward, anti_idle_reward],
         train_dataset=ds,
         args=grpo_cfg,
-        callbacks=grpo_callbacks,
+        callbacks=[_ProgressCallback()],
     )
     grpo_before = _trainable_lora_sum_abs(sft_trainer.model)
     grpo_trainer.train()
@@ -557,11 +425,6 @@ def main() -> None:
         help="Fraction of GRPO steps used to ramp from easy scaffold to full env weighting.",
     )
     parser.add_argument(
-        "--no-stability-tripwire",
-        action="store_true",
-        help="Disable oscillation/collapse early-stop guardrails (not recommended).",
-    )
-    parser.add_argument(
         "--reward-ema-decay",
         type=float,
         default=-1.0,
@@ -599,7 +462,6 @@ def main() -> None:
         sft_samples = args.sft_samples
     if args.reward_ema_decay >= 0.0:
         reward_ema_decay = float(args.reward_ema_decay)
-    stability_tripwire = not args.no_stability_tripwire
     print(f"Model preset: {args.model_preset} -> {model_name}")
     print(
         "Training preset:"
@@ -633,7 +495,6 @@ def main() -> None:
         grpo_grad_accum=grpo_grad_accum,
         grpo_beta=grpo_beta,
         reward_ema_decay=reward_ema_decay,
-        stability_tripwire=stability_tripwire,
     )
 
 

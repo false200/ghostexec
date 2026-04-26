@@ -253,9 +253,7 @@ This performs:
 - GRPO continuation from the SFT adapter.
 - Mixed reward shaping where env-derived reward remains active and local shaping can be down-weighted/up-weighted via scales.
 - Optional complexity curriculum (`easy_to_full`) that starts with stronger scaffold/local signals and anneals to env-dominant reward later.
-- Stability-first optimization defaults (cosine schedule + warmup + grad clipping + higher GRPO KL beta) and optional guardrails:
-  - `--reward-ema-decay 0..1` smooths the *env* reward channel (defaults come from `--training-preset`).
-  - omit `--no-stability-tripwire` to enable early stopping when logs show repeated “env reward down + loss up” (GRPO) or repeated loss blow-ups (SFT).
+- Stability-first optimization defaults (cosine schedule + warmup + grad clipping + higher GRPO KL beta). Optional `--reward-ema-decay 0..1` smooths the *env* reward channel (defaults come from `--training-preset`). Training always runs the full `max_*_steps` (no early-stop callbacks).
 
 Recommended model strategy for hackathon iteration speed:
 - Start with `--model-preset small_iter_fast` (`unsloth/Qwen2.5-3B-Instruct`) + QLoRA.
