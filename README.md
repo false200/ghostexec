@@ -25,8 +25,8 @@ The agent gets a dense plain-text briefing, takes one structured action, and is 
 | OpenEnv manifest | [`openenv.yaml`](openenv.yaml) |
 | Training notebook (Colab-ready) | [`notebooks/ghostexec_unsloth_grpo_hf_api.ipynb`](notebooks/ghostexec_unsloth_grpo_hf_api.ipynb) |
 | Minimal training script (Unsloth + TRL) | [`scripts/train_sft_then_grpo.py`](scripts/train_sft_then_grpo.py) |
-| Mini-blog (required) | `ADD_HF_BLOG_URL_HERE` |
-| Demo video <2 minutes (required) | `ADD_YOUTUBE_URL_HERE` |
+| Mini-blog (required) | [**BLOG.md on Hugging Face**](https://huggingface.co/spaces/modelbuilderhq/ghostexec/blob/main/BLOG.md) |
+| Demo video &lt;2 minutes (required) | [**YouTube — Ghostexec demo**](https://youtu.be/g4IFZMEzfO8) |
 
 ## Why This Environment Is Competitive
 
@@ -195,8 +195,8 @@ Supported `action_type` values:
 - [x] Minimal trainable script using Unsloth + TRL
 - [x] Colab-ready notebook for reruns
 - [x] Training evidence plots embedded in README
-- [ ] Add HF blog link
-- [ ] Add <2 minute YouTube demo link
+- [x] Add HF blog link — [spaces/modelbuilderhq/ghostexec/blob/main/BLOG.md](https://huggingface.co/spaces/modelbuilderhq/ghostexec/blob/main/BLOG.md)
+- [x] Add &lt;2 minute YouTube demo link — [youtu.be/g4IFZMEzfO8](https://youtu.be/g4IFZMEzfO8)
 
 ## Repository Structure
 
