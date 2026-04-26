@@ -12,6 +12,7 @@ scaling.
 
 from __future__ import annotations
 
+import math
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -41,6 +42,12 @@ _SEND_MESSAGE_VALID_MICRO_BONUS: float = 0.08
 _COMPLETE_TASK_VALID_MICRO_BONUS: float = 0.06
 _DELEGATE_TASK_VALID_MICRO_BONUS: float = 0.10
 _DO_NOTHING_STRICT_PENALTY: float = -0.15
+_SYNERGY_CAP: float = 0.40
+_TRADEOFF_CAP: float = 0.30
+_POTENTIAL_CAP: float = 0.25
+_SCAFFOLD_CAP: float = 0.35
+_SHAPING_TO_BASE_BUDGET: float = 1.25
+_QUALITY_CAP: float = 0.28
 _REPLY_PRIORITY_MICRO_BONUS: dict[str, float] = {
     "critical": 0.30,
     "high": 0.15,
@@ -261,6 +268,95 @@ def catastrophic(world: WorldState) -> bool:
     return vip_furious or critical_open > 3
 
 
+def _scaffold_learning_signal(
+    before: WorldState,
+    after: WorldState,
+    action: GhostexecAction,
+    *,
+    action_ok: bool,
+    step_index: int | None,
+    max_steps: int | None,
+) -> float:
+    if not action_ok:
+        return 0.0
+    if action.action_type == "do_nothing":
+        return 0.0
+    s = 0.0
+    critical_before = critical_unreplied_count(before)
+    critical_after = critical_unreplied_count(after)
+    conflict_before = len(meeting_conflicts(before))
+    conflict_after = len(meeting_conflicts(after))
+    overdue_before = len(_overdue_tasks(before))
+    overdue_after = len(_overdue_tasks(after))
+    if action.action_type == "reply_email":
+        if critical_after < critical_before:
+            s += 0.16
+        elif critical_before > 0:
+            s += 0.05
+    if action.action_type in ("reschedule_meeting", "cancel_meeting"):
+        if conflict_after < conflict_before:
+            s += 0.15
+        elif conflict_before > 0:
+            s += 0.04
+    if action.action_type in ("complete_task", "delegate_task"):
+        if overdue_after < overdue_before:
+            s += 0.12
+        elif overdue_before > 0:
+            s += 0.03
+    # Early episode shaping slightly amplified for better exploration guidance.
+    if step_index is not None and max_steps and max_steps > 0:
+        frac = max(0.0, min(1.0, step_index / max_steps))
+        if frac <= 0.33:
+            s *= 1.20
+        elif frac >= 0.85:
+            s *= 0.90
+
+    return max(-_SCAFFOLD_CAP, min(_SCAFFOLD_CAP, s))
+
+
+def _state_potential(world: WorldState) -> float:
+    conflicts = len(meeting_conflicts(world))
+    critical_open = critical_unreplied_count(world)
+    overdue = len(_overdue_tasks(world))
+    stress = float(world.stress)
+    # Lower operational pressure => higher potential.
+    return -(
+        1.15 * critical_open
+        + 0.90 * conflicts
+        + 0.55 * overdue
+        + 0.02 * stress
+    )
+
+
+def _budgeted_shaping_total(base_weighted_inner: float, shaping_total_inner: float) -> float:
+    # Keep shaping informative but bounded against the base objective to avoid exploit loops.
+    budget = _SHAPING_TO_BASE_BUDGET * (abs(base_weighted_inner) + 0.05)
+    return max(-budget, min(budget, shaping_total_inner))
+
+
+def _quality_separation_signal(
+    *,
+    c: float,
+    r: float,
+    t: float,
+    action: GhostexecAction,
+    action_ok: bool,
+) -> float:
+    # Amplify distance between clearly good vs clearly bad valid actions.
+    if not action_ok or action.action_type == "do_nothing":
+        return 0.0
+    base = W_CONFLICT * c + W_REL * r + W_TASK * t
+    if base >= 0.90:
+        return _QUALITY_CAP
+    if base >= 0.35:
+        return 0.12
+    if base <= -0.90:
+        return -_QUALITY_CAP
+    if base <= -0.35:
+        return -0.12
+    return 0.0
+
+
 def aggregate_scores(
     conflict: float,
     relationship: float,
@@ -269,11 +365,23 @@ def aggregate_scores(
     conflict_raw: float,
     critical_queue_bonus: float,
     weighted_inner: float,
+    weighted_base_only: float,
+    shaping_synergy: float,
+    shaping_tradeoff: float,
+    shaping_potential: float,
+    shaping_scaffold: float,
+    shaping_quality: float,
     action_ok: bool,
     episode_done: bool,
     world_after: WorldState,
 ) -> RewardBreakdown:
     weighted = WEIGHTED_OUTPUT_SCALE * weighted_inner
+    weighted_base_only_scaled = WEIGHTED_OUTPUT_SCALE * weighted_base_only
+    shaping_total = WEIGHTED_OUTPUT_SCALE * (
+        shaping_synergy + shaping_tradeoff + shaping_potential + shaping_scaffold + shaping_quality
+    )
+    denom = abs(weighted_base_only_scaled) + 1e-6
+    shaping_ratio = min(10.0, abs(shaping_total) / denom)
     inv = 0.0
     if not action_ok:
         inv = -0.25
@@ -291,6 +399,13 @@ def aggregate_scores(
         conflict=conflict,
         relationship=relationship,
         task=task,
+        shaping_synergy=WEIGHTED_OUTPUT_SCALE * shaping_synergy,
+        shaping_tradeoff=WEIGHTED_OUTPUT_SCALE * shaping_tradeoff,
+        shaping_potential=WEIGHTED_OUTPUT_SCALE * shaping_potential,
+        shaping_scaffold=WEIGHTED_OUTPUT_SCALE * shaping_scaffold,
+        shaping_quality=WEIGHTED_OUTPUT_SCALE * shaping_quality,
+        shaping_total=shaping_total,
+        shaping_to_base_ratio=shaping_ratio,
         weighted_base=weighted,
         output_scale=WEIGHTED_OUTPUT_SCALE,
         invalid_step_adjustment=inv,
@@ -322,6 +437,9 @@ def compute_step_reward(
     action_ok: bool,
     episode_done: bool,
     relationship_suppressed_for_email_to: frozenset[str] | None = None,
+    reward_mode: str = "full",
+    step_index: int | None = None,
+    max_steps: int | None = None,
 ) -> RewardBreakdown:
     c_core = score_conflict_resolution(before, after, action, action_ok=action_ok)
     crit_b = score_critical_queue_bonus(before, after)
@@ -335,7 +453,48 @@ def compute_step_reward(
         relationship_suppressed_for_email_to=relationship_suppressed_for_email_to,
     )
     t = score_task_completion(before, after, action, action_ok=action_ok)
-    weighted_inner = W_CONFLICT * c + W_REL * r + W_TASK * t
+    weighted_base_only = W_CONFLICT * c + W_REL * r + W_TASK * t
+    weighted_inner = weighted_base_only
+    synergy = 0.0
+    tradeoff_penalty = 0.0
+    potential_progress = 0.0
+    scaffold_signal = 0.0
+    quality_signal = 0.0
+    if reward_mode in ("full", "shaping"):
+        # Bounded nonlinear shaping to speed learning without overpowering base channels.
+        if c > 0.0 and r > 0.0:
+            synergy += min(_SYNERGY_CAP, 0.18 * math.tanh(0.35 * c * r))
+        if t > 0.0 and (c > 0.0 or r > 0.0):
+            bridge = max(c, 0.0) + max(r, 0.0)
+            synergy += min(_SYNERGY_CAP, 0.10 * math.tanh(0.25 * t * bridge))
+        if c < -0.5 and r < -0.5:
+            tradeoff_penalty -= min(_TRADEOFF_CAP, 0.12 * math.tanh(0.25 * abs(c * r)))
+        if t < -0.5 and (c < 0.0 or r < 0.0):
+            debt = abs(t) * (abs(min(c, 0.0)) + abs(min(r, 0.0)))
+            tradeoff_penalty -= min(_TRADEOFF_CAP, 0.08 * math.tanh(0.18 * debt))
+        potential_progress = max(
+            -_POTENTIAL_CAP,
+            min(_POTENTIAL_CAP, _state_potential(after) - _state_potential(before)),
+        )
+        scaffold_signal = _scaffold_learning_signal(
+            before,
+            after,
+            action,
+            action_ok=action_ok,
+            step_index=step_index,
+            max_steps=max_steps,
+        )
+        quality_signal = _quality_separation_signal(
+            c=c,
+            r=r,
+            t=t,
+            action=action,
+            action_ok=action_ok,
+        )
+        shaping_total_inner = (
+            synergy + tradeoff_penalty + potential_progress + scaffold_signal + quality_signal
+        )
+        weighted_inner += _budgeted_shaping_total(weighted_base_only, shaping_total_inner)
     bd = aggregate_scores(
         c,
         r,
@@ -343,6 +502,12 @@ def compute_step_reward(
         conflict_raw=c_raw,
         critical_queue_bonus=crit_b,
         weighted_inner=weighted_inner,
+        weighted_base_only=weighted_base_only,
+        shaping_synergy=synergy,
+        shaping_tradeoff=tradeoff_penalty,
+        shaping_potential=potential_progress,
+        shaping_scaffold=scaffold_signal,
+        shaping_quality=quality_signal,
         action_ok=action_ok,
         episode_done=episode_done,
         world_after=after,

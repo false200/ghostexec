@@ -195,6 +195,13 @@ class RewardBreakdown(BaseModel):
     conflict: float = 0.0
     relationship: float = 0.0
     task: float = 0.0
+    shaping_synergy: float = 0.0
+    shaping_tradeoff: float = 0.0
+    shaping_potential: float = 0.0
+    shaping_scaffold: float = 0.0
+    shaping_quality: float = 0.0
+    shaping_total: float = 0.0
+    shaping_to_base_ratio: float = 0.0
     weighted_base: float = 0.0
     output_scale: float = 1.0
     invalid_step_adjustment: float = 0.0

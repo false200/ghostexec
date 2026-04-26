@@ -42,6 +42,12 @@ constrained = [
 constrained-outlines = [
     "outlines>=0.1",
 ]
+train = [
+    "datasets>=2.20.0",
+    "trl>=0.22.2",
+    "transformers>=4.45.0",
+    "accelerate>=0.34.0",
+]
 
 [project.scripts]
 # Server entry point - enables running via: uv run --project . server

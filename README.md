@@ -215,6 +215,55 @@ set GHOSTEXEC_WS_BASE_URL=http://127.0.0.1:8000
 uv run pytest tests/test_complete_integration.py::test_ghostexec_env_client_against_live_url_if_set -q
 ```
 
+Post-training plot pack (loss + reward + components + baseline bar):
+
+```bash
+uv run python scripts/plot_training_report.py \
+  --trainer-history outputs/trainer_state.json \
+  --reward-csv outputs/reward_log.csv \
+  --baselines-json outputs/compliance_manifest.json \
+  --out-dir outputs/plots
+```
+
+The script writes:
+- `outputs/plots/loss_curve.png`
+- `outputs/plots/reward_curve.png`
+- `outputs/plots/components_curve.png`
+- `outputs/plots/baseline_comparison.png`
+
+SFT before GRPO (with partial live-env usage during SFT data generation and GRPO rewards):
+
+```bash
+uv run python scripts/train_sft_then_grpo.py \
+  --model-preset small_iter_fast \
+  --training-preset hackathon_turbo \
+  --env-url http://127.0.0.1:8000 \
+  --generate-sft-from-env \
+  --sft-samples 120 \
+  --max-sft-steps 60 \
+  --max-grpo-steps 120 \
+  --env-reward-scale 1.0 \
+  --local-reward-scale 0.35 \
+  --complexity-curriculum easy_to_full \
+  --curriculum-ramp-ratio 0.60
+```
+
+This performs:
+- SFT warm-start on JSONL (`prompt` + `completion`) generated from live `/reset` briefings.
+- GRPO continuation from the SFT adapter.
+- Mixed reward shaping where env-derived reward remains active and local shaping can be down-weighted/up-weighted via scales.
+- Optional complexity curriculum (`easy_to_full`) that starts with stronger scaffold/local signals and anneals to env-dominant reward later.
+- Stability-first optimization defaults (cosine schedule + warmup + grad clipping + higher GRPO KL beta) and optional guardrails:
+  - `--reward-ema-decay 0..1` smooths the *env* reward channel (defaults come from `--training-preset`).
+  - omit `--no-stability-tripwire` to enable early stopping when logs show repeated “env reward down + loss up” (GRPO) or repeated loss blow-ups (SFT).
+
+Recommended model strategy for hackathon iteration speed:
+- Start with `--model-preset small_iter_fast` (`unsloth/Qwen2.5-3B-Instruct`) + QLoRA.
+- Run many short SFT->GRPO loops, improve reward signals, then scale model size only after curves stabilize.
+- Use larger presets only when memory + runtime are consistently stable.
+- Use `--training-preset hackathon_turbo` to apply stable aggressive defaults for iterative win-rate.
+- Script prints SFT/GRPO LoRA delta checks; if deltas are near zero it stops, so you never mistake a no-op run for real finetuning.
+
 ---
 
 ## Hugging Face Spaces

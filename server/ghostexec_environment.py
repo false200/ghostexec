@@ -15,6 +15,7 @@ Rewards aggregate conflict / relationship / task scores and log each step to out
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -71,6 +72,7 @@ _REL_DISPLAY: dict[str, str] = {
 
 _INVALID_ACTION_REWARD = -0.25
 _DEFAULT_STEP_REWARD = 0.0
+_MOOD_ORDER: tuple[Mood, ...] = ("furious", "angry", "annoyed", "neutral", "happy")
 
 
 def _default_scenario_path() -> Path:
@@ -104,6 +106,7 @@ class GhostexecEnvironment(Environment):
         self,
         scenario_path: str | Path | None = None,
         schema_drift_events_path: str | Path | None = None,
+        reward_mode: str | None = None,
     ) -> None:
         self._scenario_path = Path(scenario_path) if scenario_path else _default_scenario_path()
         self._drift_events_path = (
@@ -124,6 +127,9 @@ class GhostexecEnvironment(Environment):
         self._last_step_error: str | None = None
         self._last_step_detail: str = ""
         self._last_reward_breakdown: RewardBreakdown | None = None
+        self._reward_mode = (reward_mode or os.getenv("GHOSTEXEC_REWARD_MODE", "full")).strip().lower()
+        if self._reward_mode not in {"full", "base", "shaping"}:
+            self._reward_mode = "full"
 
     # --- lifecycle ---
 
@@ -176,6 +182,7 @@ class GhostexecEnvironment(Environment):
 
         before = self.world.model_copy(deep=True)
         action_ok = self._apply_action(action)
+        self._apply_post_action_dynamics(action, action_ok=action_ok)
         self._rebuild_conflict_list()
 
         episode_done = False
@@ -191,6 +198,9 @@ class GhostexecEnvironment(Environment):
             action_ok=action_ok,
             episode_done=episode_done,
             relationship_suppressed_for_email_to=frozenset(self._reply_relationship_suppressed),
+            reward_mode=self._reward_mode,
+            step_index=self._state.step_count,
+            max_steps=self.world.max_episode_steps,
         )
         self._last_reward_breakdown = breakdown
         self._append_reward_log(breakdown, episode_done, action)
@@ -540,6 +550,62 @@ class GhostexecEnvironment(Environment):
         self._world.action_log.append(f"error: {msg}")
         return False
 
+    def _advance_clock(self, minutes: int) -> None:
+        now = _parse_dt(self.world.simulation_time)
+        new_now = (now + timedelta(minutes=minutes)).replace(tzinfo=None)
+        self.world.simulation_time = new_now.isoformat(timespec="seconds")
+        self._reapply_task_overdue_flags()
+
+    def _shift_contact_mood(self, name: str, delta: int) -> None:
+        if delta == 0:
+            return
+        c = self.get_contact(name)
+        if c is None:
+            return
+        idx = _MOOD_ORDER.index(c.mood)
+        next_idx = max(0, min(len(_MOOD_ORDER) - 1, idx + delta))
+        if next_idx != idx:
+            self.update_contact_mood(name, _MOOD_ORDER[next_idx])
+
+    def _apply_post_action_dynamics(self, action: GhostexecAction, *, action_ok: bool) -> None:
+        # Step-level world progression adds realistic pressure dynamics while
+        # remaining deterministic and learnable for policy optimization.
+        self._advance_clock(minutes=20)
+        now = _parse_dt(self.world.simulation_time)
+
+        if action_ok and action.action_type == "reply_email" and action.email_id:
+            em = next((e for e in self.world.emails if e.id == action.email_id), None)
+            if em:
+                self._shift_contact_mood(em.sender, +1)
+
+        if action_ok and action.action_type == "send_message" and action.contact_name:
+            self._shift_contact_mood(action.contact_name.strip(), +1)
+
+        if action_ok and action.action_type == "cancel_meeting" and action.meeting_id:
+            mtg = next((m for m in self.world.meetings if m.id == action.meeting_id), None)
+            if mtg:
+                for attendee in mtg.attendees:
+                    self._shift_contact_mood(attendee, -1)
+
+        # Pressure escalation only on idle/invalid behavior to keep
+        # action-quality separation sharp for learning.
+        if (not action_ok) or action.action_type == "do_nothing":
+            critical_pending = [e for e in self.world.emails if e.priority == "critical" and not e.replied]
+            if critical_pending:
+                self._shift_contact_mood(critical_pending[0].sender, -1)
+
+        # Meetings that have already ended without cancellation and still overlap
+        # indicate unresolved calendar debt; this increases stress pressure.
+        unresolved_past_conflicts = 0
+        for row in self.detect_meeting_conflicts():
+            overlap_end = _parse_dt(row["overlap_end"])
+            if overlap_end <= now:
+                unresolved_past_conflicts += 1
+        if unresolved_past_conflicts > 0:
+            self.world.action_log.append(
+                f"pressure: {unresolved_past_conflicts} unresolved past overlap(s) increased stress pressure."
+            )
+
     def _ensure_reward_log_dir(self) -> None:
         self._reward_log_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -566,6 +632,13 @@ class GhostexecEnvironment(Environment):
             "task": breakdown.task,
             "weighted_base": breakdown.weighted_base,
             "output_scale": breakdown.output_scale,
+            "shaping_synergy": breakdown.shaping_synergy,
+            "shaping_tradeoff": breakdown.shaping_tradeoff,
+            "shaping_potential": breakdown.shaping_potential,
+            "shaping_scaffold": breakdown.shaping_scaffold,
+            "shaping_quality": breakdown.shaping_quality,
+            "shaping_total": breakdown.shaping_total,
+            "shaping_to_base_ratio": breakdown.shaping_to_base_ratio,
             "invalid_step_adjustment": breakdown.invalid_step_adjustment,
             "episode_completion_bonus": breakdown.episode_completion_bonus,
             "catastrophic_penalty": breakdown.catastrophic_penalty,
@@ -573,6 +646,7 @@ class GhostexecEnvironment(Environment):
             "calendar_overlap_pairs": len(self.detect_meeting_conflicts()),
             "critical_unreplied": crit_open,
             "overdue_tasks": overdue_n,
+            "reward_mode": self._reward_mode,
         }
         with self._reward_log_path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(line) + "\n")

@@ -28,6 +28,12 @@ def test_reward_weights_and_aggregator_helpers():
         conflict_raw=c,
         critical_queue_bonus=0.0,
         weighted_inner=weighted_inner,
+        weighted_base_only=weighted_inner,
+        shaping_synergy=0.0,
+        shaping_tradeoff=0.0,
+        shaping_potential=0.0,
+        shaping_scaffold=0.0,
+        shaping_quality=0.0,
         action_ok=True,
         episode_done=False,
         world_after=w,
@@ -92,6 +98,25 @@ def test_scripted_episode_reward_direction_and_log(tmp_path, monkeypatch):
     assert "reward" in row and "episode_id" in row
     assert row.get("action_type") == "reschedule_meeting"
     assert "conflict_raw" in row and "step_ok" in row
+    assert "shaping_total" in row and "shaping_to_base_ratio" in row
+    assert "shaping_scaffold" in row
+    assert row.get("reward_mode") == "full"
+
+
+def test_reward_mode_base_turns_off_shaping_terms():
+    env = GhostexecEnvironment(SCENARIO, reward_mode="base")
+    env.reset()
+    obs = env.step(
+        GhostexecAction(
+            action_type="reschedule_meeting",
+            meeting_id="m02",
+            new_time="2026-04-21T18:00:00",
+        )
+    )
+    bd = (obs.metadata or {}).get("reward_breakdown") or {}
+    assert float(bd.get("shaping_synergy") or 0.0) == pytest.approx(0.0)
+    assert float(bd.get("shaping_tradeoff") or 0.0) == pytest.approx(0.0)
+    assert float(bd.get("shaping_potential") or 0.0) == pytest.approx(0.0)
 
 
 def test_schema_drift_events_mutate_world():

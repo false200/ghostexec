@@ -7,28 +7,57 @@ rewards in `server/reward.py`. The hackathon validator reads `openenv.yaml`
 """
 from __future__ import annotations
 
-from typing import Iterable, List
+import math
+from typing import List
 
 STRICT_MIN = 0.01
 STRICT_MAX = 0.99
 
 
 def _bounded(value: float) -> float:
-    return min(max(round(float(value), 4), STRICT_MIN), STRICT_MAX)
+    try:
+        v = round(float(value), 4)
+    except (TypeError, ValueError):
+        return 0.5
+    if not math.isfinite(v):
+        return 0.5
+    return min(max(v, STRICT_MIN), STRICT_MAX)
 
 
 def _as_reward_list(trajectory: dict | None) -> List[float]:
     payload = trajectory or {}
+    if not isinstance(payload, dict):
+        return []
     rewards = payload.get("rewards")
     if isinstance(rewards, list) and rewards:
-        return [float(r) for r in rewards]
+        out: List[float] = []
+        for r in rewards:
+            try:
+                rv = float(r)
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(rv):
+                out.append(rv)
+        return out
     if "score" in payload:
-        return [float(payload["score"])]
+        try:
+            v = float(payload["score"])
+            return [v] if math.isfinite(v) else []
+        except (TypeError, ValueError):
+            return []
     reward = payload.get("reward")
     if isinstance(reward, dict) and "total" in reward:
-        return [float(reward["total"])]
+        try:
+            v = float(reward["total"])
+            return [v] if math.isfinite(v) else []
+        except (TypeError, ValueError):
+            return []
     if reward is not None:
-        return [float(reward)]
+        try:
+            v = float(reward)
+            return [v] if math.isfinite(v) else []
+        except (TypeError, ValueError):
+            return []
     return []
 
 
